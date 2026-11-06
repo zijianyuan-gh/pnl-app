@@ -15,6 +15,8 @@ export async function serveDistCopy(port: number): Promise<{ dir: string; server
   cpSync('dist', dir, { recursive: true });
   const server = createServer((req, res) => {
     let p = normalize(decodeURIComponent((req.url ?? '/').split('?')[0]));
+    const base = process.env.BASE_PATH ?? '/';
+    if (base !== '/' && p.startsWith(base)) p = '/' + p.slice(base.length);
     if (p.endsWith('/')) p += 'index.html';
     const file = join(dir, p);
     if (!file.startsWith(dir) || !existsSync(file)) {

@@ -11,3 +11,8 @@ daybook-backup-*.json
 daybook-trades-*.csv
 *.backup.json
 /backups/
+
+# Mac app build output
+/release/
+/mac/.generated/
+/live-profile/

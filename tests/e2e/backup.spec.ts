@@ -140,7 +140,7 @@ test('Undo of a restore is refused if data changed meanwhile (second tab) — no
 
   // Meanwhile, in another tab of the same app, a trade is recorded
   const other = await context.newPage();
-  await other.goto('/');
+  await other.goto('./');
   await addEntry(other, { account: 'A', amount: '5', date: '2026-02-02' });
   await other.close();
   await expect(page.getByTestId('total-balance')).toHaveText('$1,731.69');

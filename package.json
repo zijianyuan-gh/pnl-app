@@ -14,7 +14,10 @@
     "e2e": "playwright test",
     "icons": "node scripts/generate-icons.mjs",
     "screenshots": "node scripts/screenshots.mjs",
-    "check:dist": "node scripts/check-dist.mjs"
+    "check:dist": "node scripts/check-dist.mjs",
+    "build:mac": "node scripts/build-mac.mjs",
+    "e2e:mac": "playwright test -c playwright.mac.config.ts",
+    "e2e:live": "playwright test -c playwright.live.config.ts"
   },
   "dependencies": {
     "dexie": "^4.4.7",

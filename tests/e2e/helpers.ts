@@ -3,7 +3,7 @@ import { expect, type Page } from '@playwright/test';
 export const MINUS = '−';
 
 export async function freshApp(page: Page) {
-  await page.goto('/');
+  await page.goto('./');
   await expect(page.getByTestId('tab-calendar')).toBeVisible();
 }
 

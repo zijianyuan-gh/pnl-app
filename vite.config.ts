@@ -32,7 +32,7 @@ function cspPlugin(): Plugin {
     name: 'daybook-csp',
     apply: 'build',
     transformIndexHtml(html) {
-      return html.replace('<meta charset="UTF-8" />', `<meta charset="UTF-8" />\n    <meta http-equiv="Content-Security-Policy" content="${CSP}" />\n    <meta name="referrer" content="no-referrer" />`);
+      return html.replace('<meta charset="UTF-8" />', `<meta charset="UTF-8" />\n    <meta http-equiv="Content-Security-Policy" content="${CSP}" />\n    <meta name="referrer" content="no-referrer" />\n    <meta name="daybook-build" content="${process.env.GITHUB_SHA ?? 'local'}" />`);
     },
   };
 }

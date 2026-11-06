@@ -1,14 +1,10 @@
-# CI on every push / PR. Deployment to Cloudflare Pages happens ONLY after all tests pass
-# AND the repository owner has added ONE secret (that is the explicit opt-in):
-#
-#   Settings → Secrets and variables → Actions → New repository secret
-#     CLOUDFLARE_API_TOKEN   Cloudflare API token with only "Account · Cloudflare Pages · Edit"
-#   (optional) CLOUDFLARE_ACCOUNT_ID — only needed if the token can see more than one account.
-#
-# Without the secret the deploy job does nothing and says so in the run summary.
-# The site address is chosen by Cloudflare from CF_PAGES_PROJECT (".pages.dev"); the real
-# address is read back from Cloudflare after deploying and smoke-tested. Keep it forever:
-# on-device data is tied to the exact origin.
+# Daybook release pipeline (free GitHub features only):
+#   test   → unit + Chromium/WebKit E2E on the exact /pnl-app/ build + release gate
+#   pages  → publish that tested build to the gh-pages branch (GitHub Pages, HTTPS)
+#   live   → wait until https://<owner>.github.io/<repo>/ serves THIS commit, then run the
+#            live checks there (Chromium + WebKit), incl. "a redeploy keeps existing data"
+#   mac    → build Daybook.app on macOS, test the real binary there, attach it to a release
+# Nothing is published unless `test` passes.
 name: CI & deploy
 
 on:
@@ -22,11 +18,10 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  # never cancel a running deploy on main; superseded PR runs may be cancelled
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-  CF_PAGES_PROJECT: daybook-pnl
+  BASE_PATH: /${{ github.event.repository.name }}/
 
 jobs:
   test:
@@ -43,113 +38,141 @@ jobs:
         run: npm run typecheck && npm test
       - name: Install browsers
         run: npx playwright install --with-deps chromium webkit
-      - name: E2E (Chromium + WebKit) against the production build
+      - name: E2E (Chromium + WebKit) on the published sub-path build
         run: npm run e2e
         env:
           CI: 'true'
           PW_WEBKIT: '1'
-      - name: Production build
+      - name: Build the site
         run: npm run build
       - name: Release gate — no test data, backups or secrets in the build
         run: npm run check:dist
       - uses: actions/upload-artifact@v4
         with:
-          name: dist
+          name: site
           path: dist
           retention-days: 7
 
-  pages-name:
-    # Informational: is <project>.pages.dev already serving something?
-    runs-on: ubuntu-latest
-    timeout-minutes: 3
-    steps:
-      - name: Probe pages.dev address
-        run: |
-          # prints the HTTP status, or 000 when nothing answers (unused names don't resolve/serve)
-          probe() { curl -s -o "/tmp/$1.html" -w '%{http_code}' -m 20 "https://$1.pages.dev/" || true; }
-          name="$CF_PAGES_PROJECT"
-          control="zz-unused-$(openssl rand -hex 8)"
-          a=$(probe "$name"); b=$(probe "$control")
-          if grep -q 'Daybook — P&amp;L Journal' "/tmp/$name.html" 2>/dev/null; then verdict="serving Daybook (deployed)"
-          elif [ "$a" = "$b" ]; then verdict="free — behaves like a never-used name (HTTP $a)"
-          else verdict="TAKEN by another site (HTTP $a vs $b for an unused name) — Cloudflare would assign a suffixed address"; fi
-          echo "https://$name.pages.dev → $verdict" | tee -a "$GITHUB_STEP_SUMMARY"
-
-  deploy:
+  pages:
     needs: test
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    environment:
-      name: production
-      url: ${{ steps.publish.outputs.url }}
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      ACCOUNT_ID_SECRET: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     steps:
-      - name: Opt-in check
-        id: gate
-        run: |
-          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "### Not deployed — secret CLOUDFLARE_API_TOKEN is not set (this is the opt-in). Tests passed; nothing was published." >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-          fi
-
       - uses: actions/download-artifact@v4
-        if: steps.gate.outputs.enabled == 'true'
         with:
-          name: dist
-          path: dist
-
-      - name: Resolve Cloudflare account
-        id: account
-        if: steps.gate.outputs.enabled == 'true'
+          name: site
+          path: site
+      - name: Publish to gh-pages
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          if [ -n "$ACCOUNT_ID_SECRET" ]; then id="$ACCOUNT_ID_SECRET"; else
-            if ! resp=$(curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts?per_page=50"); then
-              echo "::error::This token cannot list accounts. Add secret CLOUDFLARE_ACCOUNT_ID (Cloudflare dashboard → Account home → ⋯ next to the account → Copy account ID)."; exit 1
+          cd site
+          touch .nojekyll
+          git init -q -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -qm "Deploy ${GITHUB_SHA}"
+          git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" gh-pages
+          echo "Published ${GITHUB_SHA} to gh-pages" >> "$GITHUB_STEP_SUMMARY"
+
+  live:
+    needs: pages
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      LIVE_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Wait until the live site serves this commit
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS -m 20 "$LIVE_URL?probe=$i" | grep -q "name=\"daybook-build\" content=\"${GITHUB_SHA}\""; then
+              echo "### Live: $LIVE_URL (build ${GITHUB_SHA::7})" >> "$GITHUB_STEP_SUMMARY"; exit 0
             fi
-            n=$(jq '.result | length' <<<"$resp")
-            if [ "$n" != "1" ]; then echo "::error::The token can see $n Cloudflare accounts; add secret CLOUDFLARE_ACCOUNT_ID to choose one."; exit 1; fi
-            id=$(jq -r '.result[0].id' <<<"$resp")
-          fi
-          echo "::add-mask::$id"
-          echo "id=$id" >> "$GITHUB_OUTPUT"
-
-      - name: Create the Pages project if it doesn't exist yet
-        if: steps.gate.outputs.enabled == 'true'
-        env:
-          ACC: ${{ steps.account.outputs.id }}
-        run: |
-          api="https://api.cloudflare.com/client/v4/accounts/$ACC/pages/projects"
-          code=$(curl -s -o p.json -w '%{http_code}' -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api/$CF_PAGES_PROJECT")
-          if [ "$code" = "200" ]; then echo "Project exists."; exit 0; fi
-          if [ "$code" != "404" ]; then echo "::error::Cloudflare API returned HTTP $code"; jq -c '.errors' p.json || true; exit 1; fi
-          curl -fsS -X POST -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json" \
-            --data "{\"name\":\"$CF_PAGES_PROJECT\",\"production_branch\":\"main\"}" "$api" | jq -c '{success, subdomain: .result.subdomain, errors}'
-
-      - name: Deploy the tested build
-        if: steps.gate.outputs.enabled == 'true'
-        env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ steps.account.outputs.id }}
-        run: npx --yes wrangler@4 pages deploy dist --project-name="$CF_PAGES_PROJECT" --branch=main --commit-dirty=true
-
-      - name: Read the real address and smoke-test it
-        id: publish
-        if: steps.gate.outputs.enabled == 'true'
-        env:
-          ACC: ${{ steps.account.outputs.id }}
-        run: |
-          sub=$(curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-            "https://api.cloudflare.com/client/v4/accounts/$ACC/pages/projects/$CF_PAGES_PROJECT" | jq -r '.result.subdomain')
-          url="https://$sub"
-          echo "url=$url" >> "$GITHUB_OUTPUT"
-          for i in $(seq 1 20); do
-            if curl -fsS -m 20 "$url/" -o index.html && grep -q 'Content-Security-Policy' index.html && curl -fsS -m 20 -o /dev/null "$url/sw.js"; then
-              echo "### Live: $url" >> "$GITHUB_STEP_SUMMARY"; exit 0
-            fi
-            sleep 15
+            sleep 10
           done
-          echo "::error::Deployed, but $url did not serve the app within 5 minutes"; exit 1
+          echo "::error::$LIVE_URL is not serving ${GITHUB_SHA} after 10 minutes (is GitHub Pages enabled for the gh-pages branch?)"
+          exit 1
+      - run: npx playwright install --with-deps chromium webkit
+      - name: Restore the browser profile from the previous deployment
+        uses: actions/cache@v4
+        with:
+          path: live-profile
+          key: live-profile-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: live-profile-
+      - name: Verify the real site (Chromium + WebKit)
+        run: npm run e2e:live 2>&1 | tee live.log
+        env:
+          EXPECT_SHA: ${{ github.sha }}
+      - name: Summary
+        if: always()
+        run: grep -E "REDEPLOY CHECK|passed|failed|flaky" live.log >> "$GITHUB_STEP_SUMMARY" || true
+
+  mac:
+    needs: test
+    runs-on: macos-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      BASE_PATH: /
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.2
+      - run: npm ci
+      - name: Build the web app (root path) and check it
+        run: npm run build && npm run check:dist
+      - name: Build Daybook.app (universal, ad-hoc signed)
+        run: |
+          npm run build:mac
+          lipo -archs release/Daybook.app/Contents/MacOS/daybook
+          codesign -dv release/Daybook.app
+      - run: npx playwright install chromium webkit
+      - name: Test the real binary on macOS (Chromium + Safari's WebKit)
+        run: npm run e2e:mac
+        env:
+          DAYBOOK_BIN: release/Daybook.app/Contents/MacOS/daybook
+          PW_WEBKIT: '1'
+      - name: Test the one-line installer and a real app launch
+        run: |
+          DAYBOOK_ZIP_URL="$PWD/release/Daybook-mac.zip" DAYBOOK_DEST="$RUNNER_TEMP/Applications" bash mac/install.sh
+          for i in $(seq 1 30); do
+            [ "$(curl -s -m 2 http://127.0.0.1:47823/__daybook)" = "daybook" ] && { echo "launched via LaunchServices: OK"; break; }
+            sleep 1
+          done
+          [ "$(curl -s -m 2 http://127.0.0.1:47823/__daybook)" = "daybook" ]
+          curl -fsS http://127.0.0.1:47823/ | grep -q 'Daybook — P&amp;L Journal'
+          pkill -x daybook
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Daybook-mac
+          path: release/Daybook-mac.zip
+          retention-days: 14
+      - name: Attach to the GitHub release
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v="v$(node -p "require('./package.json').version")"
+          gh release view "$v" >/dev/null 2>&1 || gh release create "$v" --target "$GITHUB_SHA" --title "Daybook ${v#v}" \
+            --notes "Mac: download Daybook-mac.zip, or run in Terminal: curl -fsSL https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/mac/install.sh | bash"
+          gh release upload "$v" release/Daybook-mac.zip --clobber
+          echo "### Mac app: https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/Daybook-mac.zip" >> "$GITHUB_STEP_SUMMARY"

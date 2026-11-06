@@ -43,7 +43,7 @@ async function expectTradeExact(page: Page, balance: string) {
 
 test('real-trade lifecycle: reopen, offline, export, restore, update', async ({ browser }) => {
   const { server, publishNewVersion } = await serveDistCopy(4191);
-  const origin = 'http://localhost:4191/';
+  const origin = `http://localhost:4191${process.env.BASE_PATH ?? '/'}`;
   const context = await browser.newContext({ acceptDownloads: true, locale: 'en-US', viewport: { width: 1000, height: 900 } });
   try {
     // 1. First launch, record the trade

@@ -4,20 +4,21 @@ import { cpSync, mkdtempSync, readFileSync, writeFileSync, existsSync } from 'no
 import { tmpdir } from 'node:os';
 import { extname, join, normalize } from 'node:path';
 import { addEntry, createAccount, freshApp, gotoTab } from './helpers';
+const BASE = process.env.BASE_PATH ?? '/';
 
 test.skip(({ browserName }) => browserName !== 'chromium', 'service-worker automation uses Chromium');
 
 test('Scenario F — manifest, icons and iOS meta are correct', async ({ page, request }) => {
-  const m = await (await request.get('/manifest.webmanifest')).json();
-  expect(m).toMatchObject({ name: 'Daybook — P&L Journal', short_name: 'Daybook', display: 'standalone', start_url: '/', scope: '/' });
+  const m = await (await request.get('manifest.webmanifest')).json();
+  expect(m).toMatchObject({ name: 'Daybook — P&L Journal', short_name: 'Daybook', display: 'standalone', start_url: BASE, scope: BASE });
   expect(m.theme_color).toBe('#0a0a0b');
   for (const icon of m.icons) {
-    const r = await request.get('/' + icon.src);
+    const r = await request.get(icon.src);
     expect(r.status(), icon.src).toBe(200);
     expect(r.headers()['content-type']).toContain('image/png');
   }
   expect(m.icons.some((i: { purpose: string }) => i.purpose === 'maskable')).toBe(true);
-  await page.goto('/');
+  await page.goto('./');
   await expect(page.locator('meta[name=apple-mobile-web-app-capable]')).toHaveAttribute('content', 'yes');
   await expect(page.locator('meta[name=viewport]')).toHaveAttribute('content', /viewport-fit=cover/);
   const touchIcon = await page.locator('link[rel=apple-touch-icon]').getAttribute('href');
@@ -53,6 +54,7 @@ function serve(dir: string, port: number): Promise<Server> {
   };
   const server = createServer((req, res) => {
     let p = normalize(decodeURIComponent((req.url ?? '/').split('?')[0]));
+    if (BASE !== '/' && p.startsWith(BASE)) p = '/' + p.slice(BASE.length);
     if (p.endsWith('/')) p += 'index.html';
     const file = join(dir, p);
     if (!file.startsWith(dir) || !existsSync(file)) {
@@ -72,7 +74,7 @@ test('Scenario F — a new deployment is detected and applied; data survives the
   const port = 4190;
   const server = await serve(dir, port);
   try {
-    await page.goto(`http://localhost:${port}/`);
+    await page.goto(`http://localhost:${port}${BASE}`);
     await expect(page.getByTestId('tab-calendar')).toBeVisible();
     await page.evaluate(() => navigator.serviceWorker.ready);
     await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);

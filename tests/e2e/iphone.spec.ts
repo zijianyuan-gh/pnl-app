@@ -150,7 +150,7 @@ test('Safari tab vs Home Screen mode is detected and explained', async ({ page, 
   await expect(page.getByTestId('safari-tab-warning')).toContainText('Add Daybook to your Home Screen');
   const standalone = await context.newPage();
   await standalone.addInitScript(() => Object.defineProperty(navigator, 'standalone', { value: true, configurable: true }));
-  await standalone.goto('/');
+  await standalone.goto('./');
   await gotoTab(standalone, 'accounts');
   await expect(standalone.getByTestId('display-mode')).toContainText('Home Screen app');
   await expect(standalone.getByTestId('safari-tab-warning')).toHaveCount(0);
