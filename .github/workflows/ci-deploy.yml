@@ -113,7 +113,9 @@ jobs:
           key: live-profile-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: live-profile-
       - name: Verify the real site (Chromium + WebKit)
-        run: npm run e2e:live 2>&1 | tee live.log
+        run: |
+          set -o pipefail
+          npm run e2e:live 2>&1 | tee live.log
         env:
           EXPECT_SHA: ${{ github.sha }}
       - name: Summary

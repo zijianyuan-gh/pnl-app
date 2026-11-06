@@ -61,14 +61,18 @@ test('saved data survives quitting, works offline (service worker), and export â
   await page.goto('./');
   await expect(page.getByTestId('header-balance')).toHaveText('$3,734.56');
 
-  await context.setOffline(true);
+  // Playwright's emulated offline mode breaks navigations in Linux WebKit ("internal error"),
+  // so WebKit's offline behaviour is verified on macOS instead, with a real network loss
+  // (tests/mac: the server is stopped and Safari's WebKit reloads the app from its cache).
+  const emulateOffline = info.project.name !== 'live-iphone-webkit';
+  if (emulateOffline) await context.setOffline(true);
   await page.close();
   page = await context.newPage();
   await page.goto('./');
   await expect(page.getByTestId('header-balance')).toHaveText('$3,734.56');
   await addEntry(page, { amount: '34.56', loss: true, date: '2026-11-06' });
   await expect(page.getByTestId('header-balance')).toHaveText('$3,700.00');
-  await context.setOffline(false);
+  if (emulateOffline) await context.setOffline(false);
 
   if (info.project.name !== 'live-desktop-chromium') return; // file download automation: desktop
   await gotoTab(page, 'accounts');
