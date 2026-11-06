@@ -1,0 +1,48 @@
+# GitHub Pages deployment — TEMPLATE, NOT ACTIVE.
+# To enable (free HTTPS hosting at https://<user>.github.io/pnl-app/):
+#   1. Repo Settings → Pages → Build and deployment → Source: "GitHub Actions".
+#   2. Copy this file to .github/workflows/deploy.yml and push to main.
+# Note: GitHub Pages sites are public URLs. The app itself contains no data — every
+# visitor's data stays in their own browser — but the page will be reachable by anyone.
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+        env:
+          BASE_PATH: /${{ github.event.repository.name }}/
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
