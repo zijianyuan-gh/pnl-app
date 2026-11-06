@@ -30,10 +30,12 @@
 | 375 / 390 / 430 / 1280px 及 320px 布局 | ✅ Chromium 验证 | E2E + 截图人工检查 |
 | WCAG 2.1 AA（含对比度）自动审查、非颜色正负提示 | ✅ axe-core 验证 | E2E |
 | 无第三方请求、CSP 阻止外发数据、导入内容 XSS 无效 | ✅ Chromium 验证 | E2E |
-| **iOS Safari / WebKit 实际行为** | ❌ **未验证** | 本开发环境只有 Chromium，无法运行 WebKit 或真机 |
+| WebKit 引擎（Playwright WebKit，Linux，iPhone 14 模拟）：账务、备份恢复、CSV、时区、布局、iPhone 专项、无障碍、安全 | ✅ 25 项在 GitHub Actions 通过 | CI 运行 42168475671 |
+| WebKit 下的 Service Worker 离线 / 更新 / 全生命周期验收 | ❌ 未验证 | 这些测试只在 Chromium 中运行 |
+| **真实 iPhone 上的 iOS Safari** | ❌ **未验证** | Playwright WebKit ≠ iOS Safari；需要下面的真机验收 |
 | iOS 分享面板「存储到“文件”」、文件选择器、数字键盘、主屏幕模式、VoiceOver 朗读 | ❌ **未验证**（已按 iOS 规则实现并在 Chromium 中模拟） | 需要下面的真机验收 |
 
-CI（`.github/workflows/ci-deploy.yml`）会在 GitHub 上额外运行 **Playwright WebKit** 测试；第一次在 CI 中运行前，WebKit 结果同样视为未验证。
+CI（`.github/workflows/ci-deploy.yml`）在每次推送时运行类型检查、单元测试、Chromium + WebKit E2E 和生产构建。
 
 ## iPhone 真机验收（约 10 分钟）
 
