@@ -97,3 +97,31 @@ describe('formatMoney', () => {
     expect(divRound(7, 0)).toBe(0);
   });
 });
+
+describe('parseMoney — separators (iPhone decimal-comma regions, CSV)', () => {
+  const c = (s: string) => {
+    const r = parseMoney(s);
+    return r.ok ? r.cents : r.error;
+  };
+  it('accepts decimal commas from comma-decimal keyboards', () => {
+    expect(c('12,5')).toBe(1250);
+    expect(c('12,50')).toBe(1250);
+    expect(c(',5')).toBe(50);
+    expect(c('-0,99')).toBe(-99);
+    expect(c('1.234,56')).toBe(123456);
+    expect(c('12.345.678,9')).toBe(1234567890);
+  });
+  it('keeps US grouping', () => {
+    expect(c('1,234')).toBe(123400);
+    expect(c('12,345,678')).toBe(1234567800);
+    expect(c('1,234.56')).toBe(123456);
+    expect(c('1.234.567')).toBe(123456700);
+    expect(c("1'234.50")).toBe(123450);
+    expect(c('1 234,50')).toBe(123450);
+  });
+  it('rejects malformed grouping instead of guessing', () => {
+    for (const s of ['1,2,3', '12,3456', '1,23,456', '1.2.3', '1,234,56.00', '1.234.56', '1,234.5,6', '12,,5', ',']) {
+      expect(parseMoney(s).ok, s).toBe(false);
+    }
+  });
+});

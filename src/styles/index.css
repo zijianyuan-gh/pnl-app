@@ -9,9 +9,12 @@
   --color-line-strong: rgb(255 255 255 / 0.14);
   --color-ink: #f4f4f5;
   --color-ink-2: #a1a1aa;
-  --color-ink-3: #71717a;
+  --color-ink-3: #8a8a93; /* ≥ 4.4:1 on every surface */
   --color-pos: #3ddc97;
   --color-neg: #f05d5e;
+  /* lighter tints for text on tinted calendar cells (≥ 6:1) */
+  --color-pos-hi: #8ef5c4;
+  --color-neg-hi: #ffa3a1;
   --color-warn: #f5b544;
   --color-link: #6ea8ff;
   --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Inter', 'Segoe UI', Roboto,
@@ -75,22 +78,24 @@ body {
   letter-spacing: -0.01em;
 }
 
-/* iOS zooms on focus for inputs < 16px */
-input, select, textarea {
-  font-size: 16px;
-}
-
-input[type='date'], input[type='time'] {
-  -webkit-appearance: none;
-  appearance: none;
-  min-height: 44px;
-  text-align: left;
-}
-input[type='date']::-webkit-date-and-time-value, input[type='time']::-webkit-date-and-time-value {
-  text-align: left;
-}
-input::-webkit-calendar-picker-indicator {
-  filter: invert(0.8);
+/* Element defaults live in the base layer so Tailwind utilities (e.g. the 34px amount) win. */
+@layer base {
+  /* iOS zooms on focus for inputs < 16px */
+  input, select, textarea {
+    font-size: 16px;
+  }
+  input[type='date'], input[type='time'] {
+    -webkit-appearance: none;
+    appearance: none;
+    min-height: 44px;
+    text-align: left;
+  }
+  input[type='date']::-webkit-date-and-time-value, input[type='time']::-webkit-date-and-time-value {
+    text-align: left;
+  }
+  input::-webkit-calendar-picker-indicator {
+    filter: invert(0.8);
+  }
 }
 
 .scroll-area {

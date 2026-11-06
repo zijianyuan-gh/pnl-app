@@ -22,7 +22,7 @@ export async function commitImport(
 ): Promise<CommitResult> {
   const now = Date.now();
   const res: CommitResult = { trades: 0, cashflows: 0, accountsCreated: 0, tradeIds: [], flowIds: [], accountIds: [] };
-  await d.transaction('rw', [d.accounts, d.trades, d.cashflows], async () => {
+  await d.transaction('rw', [d.accounts, d.trades, d.cashflows, d.tombstones], async () => {
     const refToId = new Map<string, string>();
     let order = await d.accounts.count();
     const existingNames = new Map((await d.accounts.toArray()).map((a) => [a.name.toLowerCase(), a.id]));
@@ -58,7 +58,9 @@ export async function commitImport(
       if (!(row.status === 'ok' || (row.status === 'duplicate' && includeDuplicates))) continue;
       let id = newId();
       if (row.sourceId && UUID_RE.test(row.sourceId) && !takenIds.has(row.sourceId)) {
-        const clash = (await d.trades.get(row.sourceId)) || (await d.cashflows.get(row.sourceId));
+        // never reuse an id that exists or was deleted (a tombstoned id must stay deleted)
+        const clash =
+          (await d.trades.get(row.sourceId)) || (await d.cashflows.get(row.sourceId)) || (await d.tombstones.get(row.sourceId));
         if (!clash) id = row.sourceId;
       }
       takenIds.add(id);

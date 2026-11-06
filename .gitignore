@@ -5,3 +5,9 @@ test-results
 playwright-report
 *.local
 .DS_Store
+
+# Never commit personal financial data (exports from the app)
+daybook-backup-*.json
+daybook-trades-*.csv
+*.backup.json
+/backups/

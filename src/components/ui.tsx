@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronRight, Info, X } from 'lucide-react';
 import { formatMoney, pnlTone, type Cents } from '../lib/money';
@@ -141,6 +141,8 @@ export function Money({
 
 // ---------- Sheet (bottom sheet on phones, dialog on desktop) ----------
 
+const sheetStack: object[] = [];
+
 export function Sheet({
   open,
   onClose,
@@ -152,7 +154,9 @@ export function Sheet({
   labelledBy,
   size = 'md',
   testId,
+  initialFocus,
 }: {
+  initialFocus?: React.RefObject<HTMLElement | null>;
   open: boolean;
   onClose: () => void;
   title?: ReactNode;
@@ -169,23 +173,42 @@ export function Sheet({
   const drag = useRef<{ y: number; dy: number } | null>(null);
   const [dragY, setDragY] = useState(0);
 
-  useEffect(() => {
+  // Keep the latest onClose without re-running the effect (callers often pass inline arrows;
+  // re-running would steal focus from the field being typed in on every re-render).
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  useLayoutEffect(() => {
     if (!open) return;
+    const token = {};
+    sheetStack.push(token);
+    const root = document.getElementById('root');
+    root?.setAttribute('inert', '');
+    root?.setAttribute('aria-hidden', 'true');
     const prev = document.activeElement as HTMLElement | null;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+      // only the top-most sheet reacts
+      if (e.key === 'Escape' && sheetStack[sheetStack.length - 1] === token && !document.querySelector('[role=alertdialog]')) {
         e.stopPropagation();
-        onClose();
+        onCloseRef.current();
       }
     };
     document.addEventListener('keydown', onKey);
-    // focus the panel for screen readers without popping the keyboard
-    requestAnimationFrame(() => panelRef.current?.focus({ preventScroll: true }));
+    // Move focus into the sheet. If a field is given, focus it right away so an iOS keyboard
+    // that is already up (see primeKeyboard) stays up; otherwise focus the panel for VoiceOver.
+    if (initialFocus?.current) initialFocus.current.focus({ preventScroll: true });
+    else panelRef.current?.focus({ preventScroll: true });
     return () => {
       document.removeEventListener('keydown', onKey);
-      prev?.focus?.({ preventScroll: true });
+      sheetStack.splice(sheetStack.indexOf(token), 1);
+      if (sheetStack.length === 0) {
+        root?.removeAttribute('inert');
+        root?.removeAttribute('aria-hidden');
+      }
+      if (prev && document.contains(prev)) prev.focus?.({ preventScroll: true });
     };
-  }, [open, onClose]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   if (!open) return null;
   return createPortal(

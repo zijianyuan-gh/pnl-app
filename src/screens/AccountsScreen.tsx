@@ -1,22 +1,24 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  AlertTriangle, Archive, ArchiveRestore, Database, Download, FileDown, FileUp, Globe, HardDrive, Plus, ShieldCheck,
+  AlertTriangle, Archive, ArchiveRestore, Database, Download, FileDown, FileUp, Globe, HardDrive, Plus, ShieldCheck, Smartphone,
   Trash2, Upload, Wallet,
 } from 'lucide-react';
 import { useApp } from '../state/app';
 import { fmt } from '../i18n';
 import { createAccount, deleteAccount, eraseAllData, updateAccount } from '../db/actions';
-import { buildBackup, backupFileName } from '../db/backup';
+import { buildBackup, backupFileName, serializeBackup } from '../db/backup';
 import { isStoragePersisted, requestPersistentStorage } from '../db/db';
 import { ACCOUNT_COLORS, type Account, type Lang } from '../db/types';
 import { exportCSV } from '../lib/csv';
 import { dateToLocalISO, formatDate } from '../lib/dates';
-import { saveFile } from '../lib/files';
+import { deliverFile, isTouchDevice, makeFile, type SaveOutcome } from '../lib/files';
 import { formatMoney } from '../lib/money';
+import { primeKeyboard } from '../lib/keyboard';
+import { isIOS, isStandalone } from '../lib/platform';
 import { accountBalance, combinedBalance, type BalanceBreakdown } from '../lib/stats';
 import { AccountForm } from '../components/QuickAdd';
 import { FlowRow } from '../components/rows';
-import { CsvImportSheet, RestoreSheet } from '../components/DataSheets';
+import { CsvImportSheet, ExportSheet, RestoreSheet, type PendingExport } from '../components/DataSheets';
 import { AccountDot, Button, EmptyState, Group, InfoTip, Money, Row, Segmented, Sheet } from '../components/ui';
 
 const BACKUP_DUE_DAYS = 14;
@@ -231,10 +233,10 @@ function AccountDetailSheet({ account, balance, onClose }: { account: Account; b
           </section>
 
           <div className="mb-5 grid grid-cols-2 gap-2">
-            <Button onClick={() => openAdd({ accountId: account.id, kind: 'deposit' })} data-testid="account-deposit">
+            <Button onClick={() => { primeKeyboard(); openAdd({ accountId: account.id, kind: 'deposit' }); }} data-testid="account-deposit">
               <Download size={16} /> {T.add.kindDeposit}
             </Button>
-            <Button onClick={() => openAdd({ accountId: account.id, kind: 'withdrawal' })} data-testid="account-withdraw">
+            <Button onClick={() => { primeKeyboard(); openAdd({ accountId: account.id, kind: 'withdrawal' }); }} data-testid="account-withdraw">
               <Upload size={16} /> {T.add.kindWithdrawal}
             </Button>
           </div>
@@ -286,22 +288,38 @@ function DataSection() {
   const [persisted, setPersisted] = useState<boolean | null>(null);
   const [restoreOpen, setRestoreOpen] = useState(false);
   const [csvOpen, setCsvOpen] = useState(false);
+  const [pending, setPending] = useState<PendingExport | null>(null);
 
   useEffect(() => {
     void isStoragePersisted().then(setPersisted);
   }, []);
+
+  const finishExport = async (outcome: SaveOutcome, kind: PendingExport['kind']) => {
+    if (outcome === 'cancelled') return;
+    if (kind === 'json') await setSettings({ lastBackupAt: Date.now() });
+    toast({ message: kind === 'json' ? T.data.exported : T.data.exportedCsv, tone: 'success' });
+  };
+
+  /** Desktop: download right away. Phone: prepare first, then share from a tap (iOS needs the gesture). */
+  const offer = async (p: PendingExport) => {
+    if (!isTouchDevice()) await finishExport(await deliverFile(p.file, false), p.kind);
+    else setPending(p);
+  };
 
   const daysSince = settings.lastBackupAt ? Math.floor((Date.now() - settings.lastBackupAt) / 86_400_000) : null;
   const due = trades.length > 0 && (daysSince === null || daysSince >= BACKUP_DUE_DAYS);
 
   const exportJson = async () => {
     try {
-      const file = await buildBackup();
-      const outcome = await saveFile(backupFileName(), JSON.stringify(file, null, 2), 'application/json');
-      if (outcome !== 'cancelled') {
-        await setSettings({ lastBackupAt: Date.now() });
-        toast({ message: T.data.exported, tone: 'success' });
-      }
+      const backup = await buildBackup();
+      // serializeBackup re-parses and verifies the file before it leaves the app
+      const text = serializeBackup(backup);
+      await offer({
+        kind: 'json',
+        file: makeFile(backupFileName(), text, 'application/json'),
+        digest: backup.integrity.digest,
+        counts: fmt(T.data.counts, { a: backup.summary.accounts, t: backup.summary.trades, f: backup.summary.cashflows }),
+      });
     } catch (e) {
       toast({ message: fmt(T.errors.generic, { msg: (e as Error).message }), tone: 'error' });
     }
@@ -311,8 +329,7 @@ function DataSection() {
     const csv = exportCSV(accounts, trades, cashflows);
     const d = new Date();
     const name = `daybook-trades-${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}.csv`;
-    const outcome = await saveFile(name, csv, 'text/csv');
-    if (outcome !== 'cancelled') toast({ message: T.data.exportedCsv, tone: 'success' });
+    await offer({ kind: 'csv', file: makeFile(name, csv, 'text/csv'), counts: fmt(T.data.counts, { a: accounts.length, t: trades.length, f: cashflows.length }) });
   };
 
   const erase = async () => {
@@ -335,7 +352,12 @@ function DataSection() {
         footer={
           <span className="flex gap-2">
             <ShieldCheck size={15} className="mt-0.5 shrink-0" />
-            <span>{T.data.localNote}</span>
+            <span>
+              {T.data.localNote}
+              <span className="mt-1.5 block" data-testid="backup-security">
+                {T.data.backupSecurity}
+              </span>
+            </span>
           </span>
         }
       >
@@ -361,6 +383,17 @@ function DataSection() {
         <Row onClick={exportCsvFile} icon={<FileDown size={18} className="text-ink-2" />} label={T.data.exportCsv} chevron testId="export-csv" />
         <Row onClick={() => setCsvOpen(true)} icon={<FileUp size={18} className="text-ink-2" />} label={T.data.importCsv} chevron testId="import-csv" />
         <Row
+          icon={<Smartphone size={18} className="text-ink-2" />}
+          label={<span className="whitespace-normal text-[14px]">{isStandalone() ? T.data.modeStandalone : T.data.modeBrowser}</span>}
+          testId="display-mode"
+        />
+        {isIOS() && !isStandalone() && (
+          <div className="flex items-start gap-2 border-t border-line bg-warn/10 px-4 py-2.5 text-[13px] leading-snug text-warn" data-testid="safari-tab-warning">
+            <AlertTriangle size={15} className="mt-0.5 shrink-0" aria-hidden />
+            {T.data.safariTabWarning}
+          </div>
+        )}
+        <Row
           icon={<HardDrive size={18} className="text-ink-2" />}
           label={<span className="whitespace-normal text-[14px]">{persisted === true ? T.data.persisted : persisted === false ? T.data.notPersisted : T.data.persistUnknown}</span>}
           value={
@@ -382,6 +415,7 @@ function DataSection() {
       </Group>
       <RestoreSheet open={restoreOpen} onClose={() => setRestoreOpen(false)} onExportFirst={exportJson} />
       <CsvImportSheet open={csvOpen} onClose={() => setCsvOpen(false)} />
+      <ExportSheet pending={pending} onClose={() => setPending(null)} onDone={(o, k) => void finishExport(o, k)} />
     </>
   );
 }

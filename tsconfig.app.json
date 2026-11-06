@@ -19,5 +19,5 @@
     "noUncheckedSideEffectImports": true,
     "types": ["vite/client", "vite-plugin-pwa/client"]
   },
-  "include": ["src", "tests/unit"]
+  "include": ["src"]
 }

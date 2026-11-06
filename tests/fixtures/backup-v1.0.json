@@ -1,0 +1,131 @@
+{
+  "app": "daybook-pnl-journal",
+  "format": 1,
+  "schemaVersion": 1,
+  "exportedAt": "2026-11-06T04:57:59.861Z",
+  "summary": {
+    "accounts": 2,
+    "trades": 3,
+    "cashflows": 2,
+    "netPnlCents": 14903
+  },
+  "data": {
+    "accounts": [
+      {
+        "id": "304fed87-77df-4e41-a2c5-d99506904620",
+        "name": "Stocks",
+        "startingBalanceCents": 100000,
+        "startDate": "2026-01-01",
+        "color": "#4F8CFF",
+        "archived": false,
+        "sortOrder": 0,
+        "createdAt": 1793941079826,
+        "updatedAt": 1793941079826
+      },
+      {
+        "id": "b1c61312-2edd-41d9-a247-1da4187e8c6b",
+        "name": "Kalshi 预测",
+        "startingBalanceCents": -1234,
+        "startDate": "2026-02-01",
+        "color": "#A78BFA",
+        "archived": false,
+        "sortOrder": 1,
+        "createdAt": 1793941079846,
+        "updatedAt": 1793941079846
+      }
+    ],
+    "trades": [
+      {
+        "id": "6552d7ca-90c9-4672-93ab-437ffed79753",
+        "accountId": "304fed87-77df-4e41-a2c5-d99506904620",
+        "date": "2026-01-31",
+        "pnlCents": 20001,
+        "feesCents": 125,
+        "symbol": "AAPL",
+        "platform": "",
+        "tags": [
+          "breakout"
+        ],
+        "notes": "备注 \"quoted\", comma",
+        "side": null,
+        "quantity": null,
+        "entryPrice": null,
+        "exitPrice": null,
+        "entryTime": null,
+        "exitTime": null,
+        "createdAt": 1793941079848,
+        "updatedAt": 1793941079848
+      },
+      {
+        "id": "67ccd3f1-f8ad-4cb6-95ae-db7a6bce98a1",
+        "accountId": "304fed87-77df-4e41-a2c5-d99506904620",
+        "date": "2026-02-28",
+        "pnlCents": -5099,
+        "feesCents": null,
+        "symbol": "TSLA",
+        "platform": "",
+        "tags": [],
+        "notes": "",
+        "side": "short",
+        "quantity": null,
+        "entryPrice": null,
+        "exitPrice": null,
+        "entryTime": "09:31",
+        "exitTime": "15:59",
+        "createdAt": 1793941079850,
+        "updatedAt": 1793941079850
+      },
+      {
+        "id": "de1d82b1-3d89-4e57-856f-829b2bee2607",
+        "accountId": "b1c61312-2edd-41d9-a247-1da4187e8c6b",
+        "date": "2026-12-31",
+        "pnlCents": 1,
+        "feesCents": null,
+        "symbol": "FED-DEC",
+        "platform": "",
+        "tags": [],
+        "notes": "",
+        "side": null,
+        "quantity": null,
+        "entryPrice": null,
+        "exitPrice": null,
+        "entryTime": null,
+        "exitTime": null,
+        "createdAt": 1793941079852,
+        "updatedAt": 1793941079852
+      }
+    ],
+    "cashflows": [
+      {
+        "id": "572574f2-00a2-4ccc-b5d1-174338f10173",
+        "accountId": "304fed87-77df-4e41-a2c5-d99506904620",
+        "date": "2026-01-15",
+        "type": "deposit",
+        "amountCents": 50000,
+        "notes": "",
+        "createdAt": 1793941079857,
+        "updatedAt": 1793941079857
+      },
+      {
+        "id": "7df730a4-30c1-49b6-969f-0fd935d68013",
+        "accountId": "b1c61312-2edd-41d9-a247-1da4187e8c6b",
+        "date": "2026-03-15",
+        "type": "withdrawal",
+        "amountCents": 1000,
+        "notes": "out",
+        "createdAt": 1793941079858,
+        "updatedAt": 1793941079858
+      }
+    ],
+    "tombstones": [
+      {
+        "id": "71b189f8-ffbe-42d9-9100-4c9ed3ea8474",
+        "table": "trades",
+        "deletedAt": 1793941079856
+      }
+    ]
+  },
+  "settings": {
+    "lang": null
+  }
+}

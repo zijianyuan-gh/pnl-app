@@ -1,4 +1,6 @@
-# GitHub Pages deployment — TEMPLATE, NOT ACTIVE.
+# GitHub Pages deployment — ALTERNATIVE TEMPLATE, NOT ACTIVE (Cloudflare Pages is the recommended host,
+# see .github/workflows/ci-deploy.yml). Note: <user>.github.io is shared by all of your Pages sites,
+# so this app would not get its own origin.
 # To enable (free HTTPS hosting at https://<user>.github.io/pnl-app/):
 #   1. Repo Settings → Pages → Build and deployment → Source: "GitHub Actions".
 #   2. Copy this file to .github/workflows/deploy.yml and push to main.
@@ -30,7 +32,11 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm test
+      - run: npm run typecheck && npm test
+      - run: npx playwright install --with-deps chromium
+      - run: npm run e2e
+        env:
+          CI: 'true'
       - run: npm run build
         env:
           BASE_PATH: /${{ github.event.repository.name }}/

@@ -12,6 +12,49 @@ import { AccountDot, Button, Chip, ErrorText, FieldLabel, Segmented, Sheet, cx }
 
 type Kind = 'trade' | 'deposit' | 'withdrawal';
 const LAST_ACCOUNT_KEY = 'daybook.lastAccount';
+/**
+ * Unsaved new entry, kept on this device only (localStorage) so an app update, an iOS memory
+ * kill or an accidental swipe-close never loses what was typed. Cleared on save or "Discard".
+ */
+export const DRAFT_KEY = 'daybook.draft.v1';
+const DRAFT_MAX_AGE = 3 * 86_400_000;
+
+interface Draft {
+  savedAt: number;
+  kind: Kind;
+  accountId: string;
+  date: string;
+  sign: 'pos' | 'neg';
+  amount: string;
+  symbol: string;
+  platform: string;
+  tags: string[];
+  fees: string;
+  notes: string;
+  side: 'long' | 'short' | null;
+  quantity: string;
+  entryPrice: string;
+  exitPrice: string;
+  entryTime: string;
+  exitTime: string;
+}
+
+function readDraft(): Draft | null {
+  try {
+    const d = JSON.parse(localStorage.getItem(DRAFT_KEY) ?? 'null') as Draft | null;
+    if (!d || typeof d !== 'object' || Date.now() - d.savedAt > DRAFT_MAX_AGE) return null;
+    return d;
+  } catch {
+    return null;
+  }
+}
+function clearDraft() {
+  try {
+    localStorage.removeItem(DRAFT_KEY);
+  } catch {
+    /* ignore */
+  }
+}
 
 function lsGet(k: string) {
   try {
@@ -49,40 +92,82 @@ function QuickAddForm({ onClose }: { onClose: () => void }) {
     return activeAccounts[0]?.id ?? accounts[0]?.id ?? '';
   })();
 
-  const [kind, setKind] = useState<Kind>(editFlow ? editFlow.type : editTrade ? 'trade' : (req?.kind ?? 'trade'));
-  const [accountId, setAccountId] = useState(defaultAccountId);
-  const [date, setDate] = useState(editTrade?.date ?? editFlow?.date ?? req?.date ?? today);
-  const [sign, setSign] = useState<'pos' | 'neg'>(editTrade && editTrade.pnlCents < 0 ? 'neg' : 'pos');
+  // A saved draft only applies to new entries, and only if its account still exists
+  const [draft] = useState<Draft | null>(() => {
+    if (isEdit) return null;
+    const d = readDraft();
+    return d && accounts.some((a) => a.id === d.accountId) ? d : null;
+  });
+  const [draftNotice, setDraftNotice] = useState(!!draft);
+  const D = draft;
+
+  const [kind, setKind] = useState<Kind>(editFlow ? editFlow.type : editTrade ? 'trade' : (D?.kind ?? req?.kind ?? 'trade'));
+  const [accountId, setAccountId] = useState(D?.accountId ?? defaultAccountId);
+  const [date, setDate] = useState(editTrade?.date ?? editFlow?.date ?? D?.date ?? req?.date ?? today);
+  const [sign, setSign] = useState<'pos' | 'neg'>(editTrade ? (editTrade.pnlCents < 0 ? 'neg' : 'pos') : (D?.sign ?? 'pos'));
   const [amount, setAmount] = useState(
-    editTrade ? centsToInput(editTrade.pnlCents) : editFlow ? centsToInput(editFlow.amountCents) : '',
+    editTrade ? centsToInput(editTrade.pnlCents) : editFlow ? centsToInput(editFlow.amountCents) : (D?.amount ?? ''),
   );
-  const [symbol, setSymbol] = useState(editTrade?.symbol ?? '');
-  const [platform, setPlatform] = useState(editTrade?.platform ?? '');
-  const [tags, setTags] = useState<string[]>(editTrade?.tags ?? []);
+  const [symbol, setSymbol] = useState(editTrade?.symbol ?? D?.symbol ?? '');
+  const [platform, setPlatform] = useState(editTrade?.platform ?? D?.platform ?? '');
+  const [tags, setTags] = useState<string[]>(editTrade?.tags ?? D?.tags ?? []);
   const [tagDraft, setTagDraft] = useState('');
-  const [fees, setFees] = useState(editTrade?.feesCents != null ? centsToInput(editTrade.feesCents) : '');
-  const [notes, setNotes] = useState(editTrade?.notes ?? editFlow?.notes ?? '');
-  const [side, setSide] = useState<'long' | 'short' | null>(editTrade?.side ?? null);
-  const [quantity, setQuantity] = useState(editTrade?.quantity ?? '');
-  const [entryPrice, setEntryPrice] = useState(editTrade?.entryPrice ?? '');
-  const [exitPrice, setExitPrice] = useState(editTrade?.exitPrice ?? '');
-  const [entryTime, setEntryTime] = useState(editTrade?.entryTime ?? '');
-  const [exitTime, setExitTime] = useState(editTrade?.exitTime ?? '');
+  const [fees, setFees] = useState(editTrade?.feesCents != null ? centsToInput(editTrade.feesCents) : (D?.fees ?? ''));
+  const [notes, setNotes] = useState(editTrade?.notes ?? editFlow?.notes ?? D?.notes ?? '');
+  const [side, setSide] = useState<'long' | 'short' | null>(editTrade?.side ?? D?.side ?? null);
+  const [quantity, setQuantity] = useState(editTrade?.quantity ?? D?.quantity ?? '');
+  const [entryPrice, setEntryPrice] = useState(editTrade?.entryPrice ?? D?.entryPrice ?? '');
+  const [exitPrice, setExitPrice] = useState(editTrade?.exitPrice ?? D?.exitPrice ?? '');
+  const [entryTime, setEntryTime] = useState(editTrade?.entryTime ?? D?.entryTime ?? '');
+  const [exitTime, setExitTime] = useState(editTrade?.exitTime ?? D?.exitTime ?? '');
+  const detailSource = editTrade ?? (D ? { ...D, feesCents: D.fees ? 1 : null } : null);
   const [showMore, setShowMore] = useState(
-    !!editTrade &&
-      !!(editTrade.symbol || editTrade.platform || editTrade.tags.length || editTrade.feesCents != null || editTrade.notes ||
-        editTrade.side || editTrade.quantity || editTrade.entryPrice || editTrade.exitPrice || editTrade.entryTime || editTrade.exitTime),
+    !!detailSource &&
+      !!(detailSource.symbol || detailSource.platform || detailSource.tags.length || detailSource.feesCents != null || detailSource.notes ||
+        detailSource.side || detailSource.quantity || detailSource.entryPrice || detailSource.exitPrice || detailSource.entryTime || detailSource.exitTime),
   );
+
+  // Persist the unsaved new entry on every change
+  useEffect(() => {
+    if (isEdit) return;
+    // (tags alone don't count: they are carried over by "Save & next" on purpose)
+    const meaningful = amount.trim() || symbol.trim() || notes.trim() || fees.trim() || entryPrice || exitPrice;
+    try {
+      if (!meaningful) localStorage.removeItem(DRAFT_KEY);
+      else {
+        const d: Draft = { savedAt: Date.now(), kind, accountId, date, sign, amount, symbol, platform, tags, fees, notes, side, quantity, entryPrice, exitPrice, entryTime, exitTime };
+        localStorage.setItem(DRAFT_KEY, JSON.stringify(d));
+      }
+    } catch {
+      /* storage unavailable (private mode) — nothing to do */
+    }
+  }, [isEdit, kind, accountId, date, sign, amount, symbol, platform, tags, fees, notes, side, quantity, entryPrice, exitPrice, entryTime, exitTime]);
+
+  const discardDraft = () => {
+    clearDraft();
+    setDraftNotice(false);
+    setKind(req?.kind ?? 'trade');
+    setAccountId(defaultAccountId);
+    setDate(req?.date ?? today);
+    setSign('pos');
+    setAmount('');
+    setSymbol('');
+    setPlatform('');
+    setTags([]);
+    setFees('');
+    setNotes('');
+    setSide(null);
+    setQuantity('');
+    setEntryPrice('');
+    setExitPrice('');
+    setEntryTime('');
+    setExitTime('');
+    setShowMore(false);
+  };
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const amountRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (!isEdit && accounts.length) {
-      const id = setTimeout(() => amountRef.current?.focus({ preventScroll: true }), 280);
-      return () => clearTimeout(id);
-    }
-  }, [isEdit, accounts.length]);
 
   // Suggestions from history
   const suggestions = useMemo(() => {
@@ -194,6 +279,8 @@ function QuickAddForm({ onClose }: { onClose: () => void }) {
           });
         }
       }
+      if (!isEdit) clearDraft();
+      setDraftNotice(false);
       if (again && !isEdit) {
         // Continuous entry: keep account, date, kind, platform; clear the rest
         setAmount('');
@@ -251,6 +338,7 @@ function QuickAddForm({ onClose }: { onClose: () => void }) {
       onClose={onClose}
       title={title}
       testId="quick-add"
+      initialFocus={isEdit ? undefined : amountRef}
       headerLeft={
         <Button variant="ghost" size="sm" onClick={onClose}>
           {T.common.cancel}
@@ -280,6 +368,14 @@ function QuickAddForm({ onClose }: { onClose: () => void }) {
       }
     >
       <form onSubmit={onSubmit} noValidate>
+        {draftNotice && (
+          <div className="mb-3 flex items-center justify-between gap-2 rounded-xl bg-warn/10 py-1 pl-3 pr-1 text-[13px] text-warn" role="status" data-testid="draft-notice">
+            <span>{T.add.draftRestored}</span>
+            <button type="button" onClick={discardDraft} className="min-h-9 rounded-lg px-3 font-semibold hover:bg-white/5" data-testid="draft-discard">
+              {T.add.draftDiscard}
+            </button>
+          </div>
+        )}
         {!isEdit && (
           <Segmented
             className="mb-4"
@@ -359,7 +455,7 @@ function QuickAddForm({ onClose }: { onClose: () => void }) {
         {/* Account */}
         <div className="mb-4">
           <FieldLabel>{T.common.account}</FieldLabel>
-          <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 pb-0.5" role="radiogroup" aria-label={T.common.account}>
+          <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 pb-0.5" role="group" aria-label={T.common.account}>
             {pickerAccounts.map((a) => (
               <Chip key={a.id} active={a.id === accountId} onClick={() => setAccountId(a.id)} testId={`qa-account-${a.name}`}>
                 <AccountDot color={a.color} />
@@ -375,7 +471,7 @@ function QuickAddForm({ onClose }: { onClose: () => void }) {
           <FieldLabel htmlFor="qa-date" hint={isValidISODate(date) ? formatDate(date, locale, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : undefined}>
             {T.common.date}
           </FieldLabel>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Chip active={date === today} onClick={() => setDate(today)}>
               {T.common.today}
             </Chip>
@@ -389,7 +485,7 @@ function QuickAddForm({ onClose }: { onClose: () => void }) {
               value={date}
               onChange={(e) => setDate(e.target.value)}
               aria-invalid={!!errors.date}
-              className="field num min-h-9 min-w-0 flex-1 py-1.5"
+              className="field num min-h-9 min-w-[150px] flex-1 py-1.5"
             />
           </div>
           <ErrorText>{errors.date}</ErrorText>

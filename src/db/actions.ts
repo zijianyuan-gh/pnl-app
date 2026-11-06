@@ -27,6 +27,15 @@ async function untomb(d: DaybookDB, ids: string[]) {
   await d.tombstones.bulkDelete(ids);
 }
 
+/**
+ * Undoing a delete is a new change: bump updatedAt so the restored record is newer than the
+ * deletion. Otherwise merging an older backup that recorded the deletion would delete it again.
+ */
+function revived<T extends { updatedAt: number }>(rows: T[]): T[] {
+  const now = Date.now();
+  return rows.map((r) => ({ ...r, updatedAt: Math.max(now, r.updatedAt + 1) }));
+}
+
 // ---------- Accounts ----------
 
 export async function createAccount(input: AccountInput, d: DaybookDB = defaultDb): Promise<Account> {
@@ -68,9 +77,9 @@ export async function deleteAccount(id: string, d: DaybookDB = defaultDb): Promi
   });
   return async () => {
     await d.transaction('rw', [d.accounts, d.trades, d.cashflows, d.tombstones], async () => {
-      await d.accounts.put(acc!);
-      await d.trades.bulkPut(trades);
-      await d.cashflows.bulkPut(flows);
+      await d.accounts.put(revived([acc!])[0]);
+      await d.trades.bulkPut(revived(trades));
+      await d.cashflows.bulkPut(revived(flows));
       await untomb(d, [id, ...trades.map((t) => t.id), ...flows.map((c) => c.id)]);
     });
   };
@@ -109,7 +118,7 @@ export async function deleteTrades(ids: string[], d: DaybookDB = defaultDb): Pro
   });
   return async () => {
     await d.transaction('rw', [d.trades, d.tombstones], async () => {
-      await d.trades.bulkPut(prev);
+      await d.trades.bulkPut(revived(prev));
       await untomb(d, prev.map((t) => t.id));
     });
   };
@@ -148,7 +157,7 @@ export async function deleteCashFlows(ids: string[], d: DaybookDB = defaultDb): 
   });
   return async () => {
     await d.transaction('rw', [d.cashflows, d.tombstones], async () => {
-      await d.cashflows.bulkPut(prev);
+      await d.cashflows.bulkPut(revived(prev));
       await untomb(d, prev.map((c) => c.id));
     });
   };

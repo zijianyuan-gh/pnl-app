@@ -14,7 +14,9 @@ const MAX_CENTS = 99_999_999_999_99; // $99.9 billion, well within Number.MAX_SA
 
 /**
  * Parse a user-entered or CSV money string into integer cents without floating point.
- * Accepts: "1234.56", "$1,234.56", "-50", "−50", "+5", ".5", "(12.30)", "12.30-", "USD 5", "1 234.50".
+ * Accepts: "1234.56", "$1,234.56", "-50", "−50", "+5", ".5", "(12.30)", "12.30-", "USD 5", "1 234.50",
+ * and decimal-comma input from iPhones set to such regions: "12,5", "12,50", "1.234,56".
+ * Separators must be unambiguous: "1,234" is one thousand two hundred thirty-four; "1,2,3" is rejected.
  * More than two decimal places are rounded half away from zero (flagged with `rounded`).
  */
 export function parseMoney(raw: string | number | null | undefined): ParseMoneyResult {
@@ -29,8 +31,8 @@ export function parseMoney(raw: string | number | null | undefined): ParseMoneyR
     negative = true;
     s = s.slice(1, -1).trim();
   }
-  // Remove currency markers and grouping
-  s = s.replace(/usd/gi, '').replace(/[$\s ,_']/g, '');
+  // Remove currency markers and unambiguous grouping characters (space, NBSP, apostrophe, underscore)
+  s = s.replace(/usd/gi, '').replace(/[$\s\u00a0\u202f_']/g, '');
   s = s.replace(/[−‒–—﹣－]/g, '-');
   // Leading or trailing sign
   if (s.startsWith('+')) s = s.slice(1);
@@ -41,6 +43,9 @@ export function parseMoney(raw: string | number | null | undefined): ParseMoneyR
     negative = !negative;
     s = s.slice(0, -1);
   }
+  const normalized = normalizeSeparators(s);
+  if (normalized === null) return { ok: false, error: 'invalid' };
+  s = normalized;
   if (!/^(\d+\.?\d*|\.\d+)$/.test(s)) return { ok: false, error: s ? 'invalid' : 'empty' };
 
   const [intPartRaw, fracRaw = ''] = s.split('.');
@@ -61,6 +66,32 @@ export function parseMoney(raw: string | number | null | undefined): ParseMoneyR
   if (!Number.isSafeInteger(cents) || cents > MAX_CENTS) return { ok: false, error: 'too_large' };
   const signed = negative && cents !== 0 ? -cents : cents;
   return { ok: true, cents: signed, rounded, negative: negative && cents !== 0 };
+}
+
+/** Resolve "," and "." into a single "." decimal point, or null if the grouping is malformed. */
+function normalizeSeparators(s: string): string | null {
+  const hasDot = s.includes('.');
+  const hasComma = s.includes(',');
+  if (hasDot && hasComma) {
+    const dec = s.lastIndexOf('.') > s.lastIndexOf(',') ? '.' : ',';
+    const grp = dec === '.' ? ',' : '.';
+    const i = s.lastIndexOf(dec);
+    const intp = s.slice(0, i);
+    const frac = s.slice(i + 1);
+    if (intp.includes(dec) || frac.includes(grp)) return null;
+    const grpRe = grp === ',' ? /^\d{1,3}(,\d{3})+$/ : /^\d{1,3}(\.\d{3})+$/;
+    if (!grpRe.test(intp)) return null;
+    return `${intp.split(grp).join('')}.${frac}`;
+  }
+  if (hasComma) {
+    if (/^\d{1,3}(,\d{3})+$/.test(s)) return s.replace(/,/g, ''); // 1,234 / 12,345,678 → grouping
+    if (/^\d*,\d{1,2}$/.test(s)) return s.replace(',', '.'); // 12,5 / 12,50 → decimal comma
+    return null;
+  }
+  if (hasDot && s.indexOf('.') !== s.lastIndexOf('.')) {
+    return /^\d{1,3}(\.\d{3})+$/.test(s) ? s.replace(/\./g, '') : null; // 1.234.567 → grouping
+  }
+  return s;
 }
 
 function numberToPlainString(n: number): string {

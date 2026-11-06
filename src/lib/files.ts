@@ -1,36 +1,47 @@
 export type SaveOutcome = 'shared' | 'downloaded' | 'cancelled';
 
-function isTouchDevice(): boolean {
+export function isTouchDevice(): boolean {
   return typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
 }
 
+export function makeFile(name: string, content: string, mime: string): File {
+  return new File([content], name, { type: mime });
+}
+
+/** Whether the system share sheet can take this file (iOS: AirDrop, "Save to Files", …). */
+export function canShareFile(file: File): boolean {
+  try {
+    return typeof navigator.share === 'function' && !!navigator.canShare?.({ files: [file] });
+  } catch {
+    return false;
+  }
+}
+
 /**
- * Save a generated file. On iPhone the share sheet ("Save to Files", AirDrop, iCloud Drive)
- * is the reliable path, especially inside a home-screen app; desktops get a normal download.
+ * Hand a prepared file to the user. Call this DIRECTLY from a tap/click handler with no
+ * `await` before it: iOS Safari only opens the share sheet during a user gesture, so the
+ * file must be built beforehand (see ExportSheet).
  */
-export async function saveFile(name: string, content: string, mime: string): Promise<SaveOutcome> {
-  const blob = new Blob([content], { type: mime });
-  if (isTouchDevice() && typeof navigator.share === 'function' && typeof File !== 'undefined') {
-    const file = new File([blob], name, { type: mime });
-    if (navigator.canShare?.({ files: [file] })) {
-      try {
-        await navigator.share({ files: [file], title: name });
-        return 'shared';
-      } catch (e) {
-        if ((e as DOMException)?.name === 'AbortError') return 'cancelled';
-        // fall through to download
-      }
+export async function deliverFile(file: File, preferShare = isTouchDevice()): Promise<SaveOutcome> {
+  if (preferShare && canShareFile(file)) {
+    try {
+      await navigator.share({ files: [file], title: file.name });
+      return 'shared';
+    } catch (e) {
+      const name = (e as DOMException)?.name;
+      if (name === 'AbortError') return 'cancelled';
+      // NotAllowedError etc. → fall back to a download
     }
   }
-  const url = URL.createObjectURL(blob);
+  const url = URL.createObjectURL(file);
   const a = document.createElement('a');
   a.href = url;
-  a.download = name;
+  a.download = file.name;
   a.rel = 'noopener';
   document.body.appendChild(a);
   a.click();
   a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
   return 'downloaded';
 }
 
@@ -42,4 +53,10 @@ export function readFileText(file: File): Promise<string> {
     r.onerror = () => reject(r.error);
     r.readAsText(file);
   });
+}
+
+export function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }

@@ -7,6 +7,8 @@ import { FlowRow, TradeRow } from '../components/rows';
 import { Button, EmptyState, IconButton, InfoTip, Money, cx } from '../components/ui';
 import { addMonths, formatDate, formatMonth, monthGrid, monthKeyOf, parseISODate, type ISODate } from '../lib/dates';
 import { formatCompact, formatMoney } from '../lib/money';
+import { primeKeyboard } from '../lib/keyboard';
+import { isIOS, isStandalone } from '../lib/platform';
 import { aggregateByDay, combinedBalance, summarizeDays, type DayAgg } from '../lib/stats';
 
 export function CalendarScreen({ onCreateAccount }: { onCreateAccount: () => void }) {
@@ -73,7 +75,7 @@ export function CalendarScreen({ onCreateAccount }: { onCreateAccount: () => voi
         </div>
         <div className="mt-3 grid grid-cols-2 gap-3">
           <div className="min-w-0 rounded-2xl bg-surface px-3.5 py-3">
-            <div className="flex items-center gap-1 text-[12.5px] font-medium text-ink-3">
+            <div className="flex items-center gap-1 text-[12px] font-medium text-ink-3 min-[360px]:text-[12.5px]">
               <span className="truncate">{T.money.estBalance}</span>
               <InfoTip text={T.money.estBalanceHelp} label={T.money.estBalance} />
             </div>
@@ -83,7 +85,7 @@ export function CalendarScreen({ onCreateAccount }: { onCreateAccount: () => voi
           </div>
           <div className="min-w-0 rounded-2xl bg-surface px-3.5 py-3">
             <div className="truncate text-[12.5px] font-medium text-ink-3">
-              {formatMonth(month, locale, 'short')} · {T.money.netPnl}
+              {formatDate(`${month}-01`, locale, { month: 'short' })} · {T.money.netPnl}
             </div>
             <Money
               cents={monthNet}
@@ -107,6 +109,11 @@ export function CalendarScreen({ onCreateAccount }: { onCreateAccount: () => voi
                 </Button>
               }
             />
+            {isIOS() && !isStandalone() && (
+              <p className="mx-4 mb-4 -mt-4 rounded-xl bg-warn/10 px-3 py-2.5 text-[13px] leading-snug text-warn" data-testid="welcome-safari-warning">
+                {T.data.safariTabWarning}
+              </p>
+            )}
           </div>
         )}
 
@@ -150,7 +157,7 @@ export function CalendarScreen({ onCreateAccount }: { onCreateAccount: () => voi
               </div>
             ))}
           </div>
-          <div role="grid" aria-label={formatMonth(month, locale)} className="grid grid-cols-7 gap-1 sm:gap-1.5">
+          <div role="group" aria-label={formatMonth(month, locale)} className="grid grid-cols-7 gap-1 sm:gap-1.5">
             {grid.flat().map((d, i) =>
               d ? (
                 <DayCell
@@ -188,7 +195,10 @@ export function CalendarScreen({ onCreateAccount }: { onCreateAccount: () => voi
                 </p>
               )}
             </div>
-            <Button size="sm" className="shrink-0 whitespace-nowrap" aria-label={T.calendar.addForDay} onClick={() => openAdd({ date: selected })} data-testid="add-for-day" disabled={!allAccounts.length}>
+            <Button size="sm" className="shrink-0 whitespace-nowrap" aria-label={T.calendar.addForDay} onClick={() => {
+              primeKeyboard();
+              openAdd({ date: selected });
+            }} data-testid="add-for-day" disabled={!allAccounts.length}>
               <Plus size={16} /> {T.tabs.add}
             </Button>
           </div>
@@ -221,12 +231,13 @@ export function CalendarScreen({ onCreateAccount }: { onCreateAccount: () => voi
   );
 }
 
-/** Shrink big numbers so they fit the half-width header cards on a 375px phone. */
+/** Shrink big numbers with the screen so they fit the half-width header cards (down to 320px). */
 function fitSize(text: string): string {
-  if (text.length <= 10) return 'text-[22px] min-[400px]:text-[24px]';
-  if (text.length <= 12) return 'text-[19px] min-[400px]:text-[22px]';
-  if (text.length <= 14) return 'text-[16px] min-[400px]:text-[19px] sm:text-[22px]';
-  return 'text-[14px] min-[400px]:text-[16px] sm:text-[22px]';
+  if (text.length <= 9) return 'text-[clamp(17px,6vw,24px)]';
+  if (text.length <= 10) return 'text-[clamp(16px,5.4vw,24px)]';
+  if (text.length <= 12) return 'text-[clamp(14px,4.6vw,22px)]';
+  if (text.length <= 14) return 'text-[clamp(13px,3.9vw,22px)]';
+  return 'text-[clamp(12px,3.3vw,22px)]';
 }
 
 function DayCell({
@@ -255,7 +266,8 @@ function DayCell({
   const has = !!agg;
   const tone = !has ? 'none' : pnl > 0 ? 'pos' : pnl < 0 ? 'neg' : 'zero';
   // Intensity scales with the size of the day relative to the month's biggest day
-  const intensity = has && pnl !== 0 ? 0.16 + 0.26 * Math.sqrt(Math.abs(pnl) / maxAbs) : 0;
+  // (capped at 0.34 so the cell text keeps ≥ 6:1 contrast)
+  const intensity = has && pnl !== 0 ? 0.14 + 0.2 * Math.sqrt(Math.abs(pnl) / maxAbs) : 0;
   const bg =
     tone === 'pos'
       ? `rgb(61 220 151 / ${intensity})`
@@ -270,9 +282,8 @@ function DayCell({
   return (
     <button
       type="button"
-      role="gridcell"
-      aria-label={label}
-      aria-selected={isSelected}
+      aria-pressed={isSelected}
+      aria-current={isToday ? 'date' : undefined}
       data-testid={`day-${date}`}
       data-pnl={has ? pnl : undefined}
       onClick={onSelect}
@@ -283,7 +294,10 @@ function DayCell({
         isSelected && 'ring-2 ring-ink/85 ring-inset',
       )}
     >
+      {/* Spoken name: full date and exact signed amount; the compact visible text is hidden from AT */}
+      <span className="sr-only">{label}</span>
       <span
+        aria-hidden
         className={cx(
           'num flex h-[18px] min-w-[18px] items-center justify-center self-start rounded-full px-1 text-[11px] font-semibold leading-none sm:h-5 sm:min-w-5 sm:text-[12px]',
           isToday ? 'bg-ink text-black' : has ? 'text-ink' : 'text-ink-3',
@@ -292,11 +306,11 @@ function DayCell({
         {day}
       </span>
       {has && (
-        <span className="mt-auto block w-full min-w-0 text-center">
+        <span className="mt-auto block w-full min-w-0 text-center" aria-hidden>
           <span
             className={cx(
               'num block whitespace-nowrap text-[10.5px] font-bold leading-tight tracking-[-0.04em] min-[400px]:text-[11.5px] sm:text-[14px]',
-              tone === 'pos' ? 'text-pos' : tone === 'neg' ? 'text-neg' : 'text-ink-2',
+              tone === 'pos' ? 'text-pos-hi' : tone === 'neg' ? 'text-neg-hi' : 'text-ink-2',
             )}
           >
             <span className="sm:hidden">{formatCompact(pnl)}</span>
@@ -304,8 +318,9 @@ function DayCell({
               {Math.abs(pnl) < 100_000_00 ? formatMoney(pnl, { sign: 'always', cents: Math.abs(pnl) < 1_000_00 }) : formatCompact(pnl)}
             </span>
           </span>
-          <span className="num block truncate text-[9px] leading-tight text-ink-2/80 min-[400px]:text-[9.5px] sm:text-[11.5px]">
-            {tradeLabel(agg!.trades)}
+          <span className="num block truncate text-[9.5px] leading-tight text-[#d4d4d8] min-[400px]:text-[10px] sm:text-[11.5px]" aria-hidden>
+            <span className="min-[360px]:hidden">{agg!.trades}×</span>
+            <span className="hidden min-[360px]:inline">{tradeLabel(agg!.trades)}</span>
           </span>
         </span>
       )}

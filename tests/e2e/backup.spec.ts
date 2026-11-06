@@ -44,11 +44,12 @@ test('Scenario C — export, erase, restore reproduces identical data and stats'
   writeFileSync(join(dir, 'bad.json'), JSON.stringify(bad));
   await page.getByTestId('restore-json').click();
   await page.getByTestId('restore-file').setInputFiles(join(dir, 'bad.json'));
-  await expect(page.getByTestId('restore-error')).toContainText('integrity check');
+  await expect(page.getByTestId('restore-error')).toContainText('SHA-256 checksum doesn’t match');
 
   // Restore the real backup
   await page.getByTestId('restore-file').setInputFiles(path!);
   await expect(page.getByTestId('restore-summary')).toHaveText('2 accounts · 3 trades · 1 transfer · Net P&L +$170.37');
+  await expect(page.getByTestId('restore-integrity')).toContainText('Checksum verified (SHA-256)');
   await page.getByTestId('restore-run').click();
   await expect(page.getByTestId('restore-sheet')).toBeHidden();
   await expect(page.getByTestId('total-balance')).toHaveText('$3,670.37');
@@ -71,6 +72,17 @@ test('Scenario C — export, erase, restore reproduces identical data and stats'
   await page.getByTestId('restore-run').click();
   await expect(page.getByTestId('total-balance')).toHaveText('$3,670.37');
   await expect(page.locator('#screen-accounts')).toContainText('2 accounts · 3 trades · 1 transfer');
+
+  // Undo of a restore puts the previous data back exactly
+  await page.getByTestId('restore-json').click();
+  await page.getByTestId('restore-file').setInputFiles('tests/fixtures/backup-v1.0.json');
+  await expect(page.getByTestId('restore-integrity')).toContainText('Older v1.0 backup');
+  await page.getByTestId('restore-mode-replace').click();
+  await page.getByTestId('restore-run').click();
+  await page.getByTestId('confirm-ok').click();
+  await expect(page.getByTestId('total-balance')).toHaveText('$1,626.69'); // v1.0 fixture: 1649.02 + (−22.33)
+  await page.getByRole('status').getByRole('button', { name: 'Undo' }).click();
+  await expect(page.getByTestId('total-balance')).toHaveText('$3,670.37');
 
   // Survives a full reload (IndexedDB persistence)
   await page.reload();

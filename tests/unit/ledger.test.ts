@@ -192,7 +192,7 @@ describe('Scenario C — backup and restore', () => {
     const tampered = structuredClone(file);
     tampered.data.trades[0].pnlCents += 1;
     const r1 = parseBackup(JSON.stringify(tampered));
-    expect(r1.ok === false && r1.error).toBe('checksum_mismatch');
+    expect(r1.ok === false && r1.error).toBe('digest_mismatch');
     const bad = structuredClone(file);
     (bad.data.trades[0] as unknown as Record<string, unknown>).date = '2026-02-31';
     expect(parseBackup(JSON.stringify(bad)).ok).toBe(false);

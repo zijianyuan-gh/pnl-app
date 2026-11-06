@@ -1,7 +1,7 @@
 {
   "name": "daybook-pnl-journal",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Daybook — a local-first personal trading P&L journal (PWA)",
   "type": "module",
   "scripts": {
@@ -12,7 +12,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test",
-    "icons": "node scripts/generate-icons.mjs"
+    "icons": "node scripts/generate-icons.mjs",
+    "screenshots": "node scripts/screenshots.mjs"
   },
   "dependencies": {
     "dexie": "^4.4.7",
@@ -22,6 +23,7 @@
     "react-dom": "^19.3.1"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
     "@playwright/test": "1.63.0",
     "@tailwindcss/vite": "^4.3.4",
     "@types/node": "^26.6.6",

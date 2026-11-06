@@ -10,6 +10,7 @@ import { QuickAddSheet } from './components/QuickAdd';
 import { ConfirmDialog, Toasts } from './components/overlays';
 import { requestPersistentStorage } from './db/db';
 import { cx } from './components/ui';
+import { primeKeyboard } from './lib/keyboard';
 
 type Tab = 'calendar' | 'trades' | 'analytics' | 'accounts';
 const TABS: Tab[] = ['calendar', 'trades', 'analytics', 'accounts'];
@@ -136,7 +137,10 @@ function TabBar({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
         <div className="flex flex-1 items-center justify-center">
           <button
             type="button"
-            onClick={() => openAdd()}
+            onClick={() => {
+              primeKeyboard();
+              openAdd();
+            }}
             aria-label={T.tabs.add}
             data-testid="tab-add"
             className="flex h-12 w-12 items-center justify-center rounded-full bg-ink text-black shadow-lg shadow-black/40 transition active:scale-95"
@@ -169,7 +173,7 @@ function applyUpdate(updateServiceWorker: (reload?: boolean) => Promise<void>) {
 }
 
 function UpdateBanner() {
-  const { T } = useApp();
+  const { T, addRequest, confirm } = useApp();
   const {
     needRefresh: [needRefresh],
     updateServiceWorker,
@@ -187,7 +191,13 @@ function UpdateBanner() {
     <div className="pt-safe px-safe z-50 bg-surface-3 pb-2 text-[14px]" role="status" data-testid="update-banner">
       <div className="mx-auto flex max-w-[720px] items-center justify-between gap-3">
         <span>{T.update.available}</span>
-        <button type="button" className="min-h-9 rounded-lg bg-ink px-3 font-semibold text-black" onClick={() => applyUpdate(updateServiceWorker)}>
+        <button type="button" className="min-h-9 rounded-lg bg-ink px-3 font-semibold text-black" onClick={async () => {
+            // Never silently throw away an open entry (it is also auto-saved as a draft)
+            if (addRequest && !(await confirm({ title: T.update.unsavedTitle, body: T.update.unsavedBody, confirmLabel: T.common.reload }))) return;
+            applyUpdate(updateServiceWorker);
+          }}
+          data-testid="update-reload"
+        >
           {T.common.reload}
         </button>
       </div>

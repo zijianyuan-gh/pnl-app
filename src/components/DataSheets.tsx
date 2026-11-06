@@ -1,14 +1,79 @@
 import { useMemo, useRef, useState } from 'react';
-import { AlertTriangle, CheckCircle2, FileJson, FileSpreadsheet } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, FileJson, FileSpreadsheet, Share } from 'lucide-react';
 import { useApp } from '../state/app';
 import { fmt } from '../i18n';
 import { parseBackup, restoreBackup, type ParsedBackup } from '../db/backup';
 import { commitImport, undoImport } from '../db/importCsv';
 import { buildImportPreview, guessMapping, IMPORT_FIELDS, parseCSV, type ImportField, type ImportOptions, type Mapping } from '../lib/csv';
 import { formatDate, type DateOrder } from '../lib/dates';
-import { readFileText } from '../lib/files';
+import { canShareFile, deliverFile, formatBytes, readFileText, type SaveOutcome } from '../lib/files';
 import { formatMoney } from '../lib/money';
 import { Button, FieldLabel, Money, Segmented, Sheet, cx } from './ui';
+
+/** Refuse absurdly large files instead of freezing the phone (≈ 200k trades as JSON). */
+const MAX_IMPORT_BYTES = 50 * 1024 * 1024;
+
+// ---------------- Export (phones) ----------------
+
+export interface PendingExport {
+  kind: 'json' | 'csv';
+  file: File;
+  digest?: string;
+  counts: string;
+}
+
+/**
+ * Step 2 of exporting on a phone. The file is already built, so the button can call the share
+ * sheet synchronously inside the tap — iOS Safari refuses navigator.share() otherwise.
+ */
+export function ExportSheet({
+  pending,
+  onClose,
+  onDone,
+}: {
+  pending: PendingExport | null;
+  onClose: () => void;
+  onDone: (o: SaveOutcome, kind: PendingExport['kind']) => void;
+}) {
+  const { T } = useApp();
+  if (!pending) return null;
+  const share = canShareFile(pending.file);
+  return (
+    <Sheet open onClose={onClose} title={pending.kind === 'json' ? T.data.exportReady : T.data.csvReady} testId="export-sheet">
+      <div className="rounded-2xl bg-surface-2 px-4 py-3">
+        <p className="flex items-center gap-2 break-all text-[14px] font-semibold">
+          {pending.kind === 'json' ? <FileJson size={17} className="shrink-0" aria-hidden /> : <FileSpreadsheet size={17} className="shrink-0" aria-hidden />}
+          {pending.file.name}
+        </p>
+        <p className="num mt-1 text-[13px] text-ink-2">
+          {pending.counts} · {formatBytes(pending.file.size)}
+        </p>
+        {pending.digest && (
+          <p className="mt-1 text-[12px] text-ink-3">
+            SHA-256 <span className="num">{pending.digest.slice(0, 16)}…</span>
+          </p>
+        )}
+      </div>
+      <Button
+        variant="primary"
+        size="lg"
+        className="mt-4 w-full"
+        data-testid="export-deliver"
+        onClick={() => {
+          // no await before deliverFile: keeps the user gesture for iOS
+          void deliverFile(pending.file, true).then((o) => {
+            onDone(o, pending.kind);
+            if (o !== 'cancelled') onClose();
+          });
+        }}
+      >
+        <Share size={18} aria-hidden /> {share ? T.data.exportShare : T.data.exportDownload}
+      </Button>
+      <p className="mt-3 px-1 text-[13px] leading-relaxed text-ink-2">{share ? T.data.exportHint : T.data.exportHintDownload}</p>
+      <p className="mt-2 px-1 text-[12.5px] leading-relaxed text-ink-3">{T.data.backupSecurity}</p>
+    </Sheet>
+  );
+}
 
 // ---------------- JSON restore ----------------
 
@@ -35,6 +100,10 @@ export function RestoreSheet({ open, onClose, onExportFirst }: { open: boolean; 
     if (!f) return;
     setError(null);
     setBackup(null);
+    if (f.size > MAX_IMPORT_BYTES) {
+      setError(T.data.errors.tooLarge);
+      return;
+    }
     let text: string;
     try {
       text = await readFileText(f);
@@ -67,7 +136,15 @@ export function RestoreSheet({ open, onClose, onExportFirst }: { open: boolean; 
     setBusy(true);
     try {
       const r = await restoreBackup(backup, mode);
-      toast({ message: fmt(T.data.restoreDone, { a: r.accounts, t: r.trades, f: r.cashflows }), tone: 'success' });
+      toast({
+        message:
+          mode === 'replace'
+            ? fmt(T.data.restoreDone, { a: r.accounts, t: r.trades, f: r.cashflows })
+            : fmt(T.data.mergeDone, { added: r.added, updated: r.updated, deleted: r.deleted, kept: r.kept }),
+        tone: 'success',
+        action: { label: T.common.undo, onClick: r.undo },
+        duration: 10_000,
+      });
       close();
     } catch (e) {
       toast({ message: fmt(T.errors.generic, { msg: (e as Error).message }), tone: 'error' });
@@ -81,7 +158,7 @@ export function RestoreSheet({ open, onClose, onExportFirst }: { open: boolean; 
       <input
         ref={input}
         type="file"
-        accept=".json,application/json"
+        accept=".json,application/json,text/json,text/plain"
         className="sr-only"
         data-testid="restore-file"
         onChange={(e) => onFile(e.target.files?.[0])}
@@ -104,7 +181,11 @@ export function RestoreSheet({ open, onClose, onExportFirst }: { open: boolean; 
         <div className="mt-4 space-y-4">
           <div className="rounded-2xl bg-surface-2 px-4 py-3">
             <p className="flex items-center gap-2 text-[14px] font-semibold">
-              <CheckCircle2 size={16} className="text-pos" />
+              {backup.integrity === 'sha256' ? (
+                <CheckCircle2 size={16} className="shrink-0 text-pos" aria-hidden />
+              ) : (
+                <AlertTriangle size={16} className="shrink-0 text-warn" aria-hidden />
+              )}
               {backup.exportedAt ? fmt(T.data.restoreFile, { date: new Date(backup.exportedAt).toLocaleString(locale) }) : T.data.restoreTitle}
             </p>
             <p className="num mt-1 text-[13px] text-ink-2" data-testid="restore-summary">
@@ -115,6 +196,10 @@ export function RestoreSheet({ open, onClose, onExportFirst }: { open: boolean; 
                 net: formatMoney(backup.summary.netPnlCents, { sign: 'always' }),
               })}
             </p>
+            <p className={cx('mt-2 text-[12.5px] leading-snug', backup.integrity === 'sha256' ? 'text-ink-2' : 'text-warn')} data-testid="restore-integrity">
+              {backup.integrity === 'sha256' ? T.data.integritySha : T.data.integrityLegacy}
+            </p>
+            <p className="mt-1 text-[12px] leading-snug text-ink-3">{T.data.integrityNote}</p>
           </div>
           <div className="space-y-2" role="radiogroup">
             {(['replace', 'merge'] as const).map((m) => (
@@ -189,6 +274,10 @@ export function CsvImportSheet({ open, onClose }: { open: boolean; onClose: () =
     if (!f) return;
     reset();
     setFileName(f.name);
+    if (f.size > MAX_IMPORT_BYTES) {
+      setError(T.data.errors.tooLarge);
+      return;
+    }
     try {
       const text = await readFileText(f);
       const t = parseCSV(text);
@@ -247,7 +336,7 @@ export function CsvImportSheet({ open, onClose }: { open: boolean; onClose: () =
         ) : undefined
       }
     >
-      <input ref={input} type="file" accept=".csv,text/csv,text/plain,.tsv" className="sr-only" data-testid="csv-file" onChange={(e) => onFile(e.target.files?.[0])} />
+      <input ref={input} type="file" accept=".csv,.tsv,.txt,text/csv,text/comma-separated-values,text/tab-separated-values,text/plain" className="sr-only" data-testid="csv-file" onChange={(e) => onFile(e.target.files?.[0])} />
       <button
         type="button"
         onClick={() => input.current?.click()}
@@ -276,7 +365,7 @@ export function CsvImportSheet({ open, onClose }: { open: boolean; onClose: () =
                     {(f === 'date' || f === 'pnl') && <span className="text-neg"> *</span>}
                   </span>
                   <select
-                    className="field min-h-10 min-w-0 flex-1 bg-surface-3 py-1.5 text-[14px]"
+                    className="field min-h-10 min-w-0 flex-1 bg-surface-3 py-1.5"
                     value={mapping[f] ?? ''}
                     onChange={(e) => setField(f, e.target.value)}
                     data-testid={`map-${f}`}

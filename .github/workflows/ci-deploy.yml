@@ -1,0 +1,76 @@
+# CI on every push / PR; deployment to Cloudflare Pages ONLY after a one-time opt-in.
+#
+# Nothing is deployed until ALL of these exist (Repo → Settings → Secrets and variables → Actions):
+#   secret   CLOUDFLARE_API_TOKEN   – Cloudflare API token with "Cloudflare Pages: Edit" only
+#   secret   CLOUDFLARE_ACCOUNT_ID  – your Cloudflare account id
+#   variable DEPLOY_ENABLED = true
+# Site: https://<CF_PAGES_PROJECT>.pages.dev  (project name below; keep it forever — browser
+# data is tied to the exact origin, so changing the address later strands your on-device data).
+name: CI & deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CF_PAGES_PROJECT: daybook-pnl
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Type check + unit tests
+        run: npm run typecheck && npm test
+      - name: Install browsers
+        run: npx playwright install --with-deps chromium webkit
+      - name: E2E (Chromium + WebKit) against the production build
+        run: npm run e2e
+        env:
+          CI: 'true'
+          PW_WEBKIT: '1'
+      - name: Production build
+        run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist
+          retention-days: 7
+
+  deploy:
+    needs: test
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://${{ env.CF_PAGES_PROJECT }}.pages.dev
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - name: Create the Pages project on first run (no-op afterwards)
+        run: npx --yes wrangler@4 pages project create "$CF_PAGES_PROJECT" --production-branch=main || true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Deploy tested build
+        run: npx --yes wrangler@4 pages deploy dist --project-name="$CF_PAGES_PROJECT" --branch=main --commit-dirty=true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
