@@ -65,7 +65,8 @@ jobs:
     steps:
       - name: Probe pages.dev address
         run: |
-          probe() { curl -s -o "/tmp/$1.html" -w '%{http_code}' -m 20 "https://$1.pages.dev/" || echo 000; }
+          # prints the HTTP status, or 000 when nothing answers (unused names don't resolve/serve)
+          probe() { curl -s -o "/tmp/$1.html" -w '%{http_code}' -m 20 "https://$1.pages.dev/" || true; }
           name="$CF_PAGES_PROJECT"
           control="zz-unused-$(openssl rand -hex 8)"
           a=$(probe "$name"); b=$(probe "$control")
