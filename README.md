@@ -81,25 +81,30 @@ npm test             # 单元测试（Vitest）
 npm run e2e          # E2E（Playwright，自动构建并启动预览）；PW_WEBKIT=1 时额外跑 WebKit
 ```
 
-## 稳定 HTTPS 安装：Cloudflare Pages（推荐，免费）
+## 在线版（GitHub Pages，HTTPS）
 
-选择 Cloudflare Pages 的独立 `*.pages.dev` 地址，使这款财务 App 拥有**自己独立的 Web Origin**（不与其他网站共享存储）。GitHub Pages 的 `<用户名>.github.io` 由你所有 Pages 站点共享同一个 Origin，因此只作为备选（`deploy/github-pages.yml`，未启用）。
+**https://zijianyuan-gh.github.io/pnl-app/**
 
-工作流 `.github/workflows/ci-deploy.yml`：每次推送都运行类型检查、单元测试、Chromium + WebKit E2E、生产构建和发布检查（`npm run check:dist`：构建中不得含测试交易、备份文件或密钥，且必须带 CSP）。**只有全部通过、且仓库中存在 `CLOUDFLARE_API_TOKEN` 这个 secret 时**才会部署；没有它时只跑测试，运行摘要里写明「Not deployed」。部署后工作流从 Cloudflare 读取**实际分配的地址**并做线上冒烟测试，地址写在运行摘要的 `Live: https://…` 中。
+`.github/workflows/ci-deploy.yml` 在每次推送到 `main` 时：
+1. 运行类型检查、单元测试、Chromium + WebKit E2E（针对 `/pnl-app/` 子路径的正式构建）和发布检查（`npm run check:dist`：不得含测试交易、备份文件或密钥，必须带 CSP）；
+2. 全部通过后，把**这份已测试的构建**发布到 `gh-pages` 分支；
+3. 等待线上地址返回本次提交的构建（`<meta name="daybook-build">`），再在**真实线上地址**上运行 Chromium + WebKit 检查：首页、快速记录、统计、账户、中英文、手机布局、HTTPS 下的 Service Worker 离线、退出重开、备份恢复，以及“重新部署后旧数据仍在”（跨部署保留同一个浏览器配置文件进行核对）。
 
-**你需要完成的唯一一次授权：**
+数据只保存在访问者自己设备的浏览器里，网站本身不含任何数据。重新部署只替换代码文件，不会触碰浏览器中的 IndexedDB。地址与数据绑定，请一直使用这个地址。
 
-1. 登录（或免费注册）Cloudflare → 右上角头像 → **My Profile → API Tokens → Create Token → Create Custom Token**。
-2. 名称随意（如 `daybook-pages`）；Permissions 选 **Account · Cloudflare Pages · Edit**（只选这一项）；Account Resources 选你的账户；其余默认 → **Continue to summary → Create Token**，复制 token（只显示一次）。
-3. GitHub 仓库 → **Settings → Secrets and variables → Actions → New repository secret**：Name 填 `CLOUDFLARE_API_TOKEN`，Secret 粘贴 token → **Add secret**。
-4. **Actions → CI & deploy → Run workflow**（或等下一次推送）。约 6–8 分钟后，在运行摘要中看到 `Live: https://…` 即为正式地址。
+## Mac 本地版
 
-账户 ID 会从 token 自动识别；只有当 token 能看到多个 Cloudflare 账户时，才需要再添加 secret `CLOUDFLARE_ACCOUNT_ID`。token 只保存在 GitHub Secrets 中，不会出现在代码或日志里；不需要时可在 Cloudflare 中随时吊销。
+一个独立的 `Daybook.app`（内置网页版和一个只监听本机 `127.0.0.1:47823` 的微型服务器，无需安装 Node 或其他依赖），在 macOS GitHub 运行器上构建并测试（Chromium + WebKit、服务器停止后离线可用、重启后数据仍在、安装脚本与真实启动）。
 
-注意：
-- 项目名 `daybook-pnl`；每次 CI 的 `pages-name` 任务会检查 `daybook-pnl.pages.dev` 是否已被占用。若被占用，Cloudflare 会分配带后缀的地址，以运行摘要中的实际地址为准。**确定地址后不要再更换**：浏览器数据与 Origin 绑定，换地址等于换了一个空 App（只能靠备份迁移）。
-- 部署内容只有静态代码，不包含任何个人数据；任何人都能打开这个（空的）应用，但只能看到他们自己设备里的数据。
-- 不涉及你已有的其他域名或服务。
+**安装 / 更新**（终端中粘贴一行）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/zijianyuan-gh/pnl-app/main/mac/install.sh | bash
+```
+
+安装到 `~/Applications/Daybook.app` 并打开；以后从 Spotlight 或启动台打开 Daybook 即可，它会在默认浏览器中打开 `http://127.0.0.1:47823/`。也可以直接下载 [Daybook-mac.zip](https://github.com/zijianyuan-gh/pnl-app/releases/latest/download/Daybook-mac.zip)，解压后首次打开需在「系统设置 → 隐私与安全性」中点「仍要打开」（应用未经 Apple 付费公证）。
+
+本地版的数据保存在 Mac 默认浏览器中（地址 `127.0.0.1:47823`），与 iPhone、在线版互相独立；在设备之间迁移请使用备份导出与恢复。
 
 ## 数据备份与恢复
 
@@ -182,7 +187,7 @@ src/
   lib/                    金额、日期、统计、CSV、SHA-256、文件、平台检测（纯函数为主）
   i18n/                   中英文文案
 tests/unit/ tests/e2e/ tests/fixtures/
-.github/workflows/ci-deploy.yml   CI + Cloudflare Pages 部署（需一次性授权）
-deploy/github-pages.yml           GitHub Pages 备选模板（未启用）
+.github/workflows/ci-deploy.yml   测试 → GitHub Pages 发布 → 线上验证；Mac 应用构建与发布
+mac/                              Mac 启动器（server.ts）与一行安装脚本
 docs/screenshots/                 生产构建截图（合成数据）
 ```

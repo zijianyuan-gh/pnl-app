@@ -1,9 +1,9 @@
 # Daybook iPhone 安装与验收指南
 
-> 前提：网站已发布到 HTTPS 地址（发布后在 GitHub → Actions → “CI & deploy” 运行摘要中显示 `Live: https://…`）。以下用 `https://你的地址` 代替。
+> 地址：**https://zijianyuan-gh.github.io/pnl-app/**
 
 ## 1. 安装到主屏幕
-1. 用 **Safari** 打开 `https://你的地址`（必须是 Safari）。
+1. 用 **Safari** 打开 **https://zijianyuan-gh.github.io/pnl-app/**（必须是 Safari）。
 2. 点底部 **分享** 按钮 → **添加到主屏幕** → 名称保持 “Daybook” → **添加**。
 3. **以后只从主屏幕图标打开。** Safari 标签页和主屏幕 App 的数据互不相通。
 4. 打开 账户 → 数据与备份，应显示「正在以主屏幕 App 方式运行」。「持久化存储」如显示未授予，点「申请」；iOS 不一定授予，此时更要定期备份。
