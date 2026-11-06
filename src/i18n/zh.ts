@@ -251,6 +251,8 @@ export const zh: Dict = {
     restoreConfirmTitle: '替换全部数据？',
     restoreConfirmBody: '当前的 {a} 个账户和 {t} 笔交易将被替换。建议先导出一份备份。',
     restoreDone: '已恢复 {a} 个账户、{t} 笔交易、{f} 条资金记录',
+    undoDone: '已撤销',
+    undoConflict: '无法撤销：此后数据已有改动（新增、修改或删除了记录）。为避免覆盖，未做任何更改，现有数据全部保留。',
     mergeDone: '合并完成：新增 {added} · 更新 {updated} · 删除 {deleted} · 保持不变 {kept}',
     integritySha: '校验通过（SHA-256）：文件自导出后未被改动。',
     integrityLegacy: 'v1.0 旧版备份：只能校验记录数量和总盈亏。',

@@ -249,6 +249,8 @@ export const en = {
     restoreConfirmTitle: 'Replace all data?',
     restoreConfirmBody: 'Your current {a|account|accounts} and {t|trade|trades} will be replaced. Consider exporting a backup first.',
     restoreDone: 'Restored {a|account|accounts}, {t|trade|trades}, {f|transfer|transfers}',
+    undoDone: 'Undone',
+    undoConflict: 'Can’t undo: your data changed since then (an entry was added, edited or deleted). Nothing was overwritten — all current data is kept.',
     mergeDone: 'Merged: {added} added · {updated} updated · {deleted} deleted · {kept} kept as is',
     integritySha: 'Checksum verified (SHA-256): the file is unchanged since it was exported.',
     integrityLegacy: 'Older v1.0 backup: only record counts and total P&L can be verified.',

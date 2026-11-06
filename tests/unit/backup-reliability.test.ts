@@ -6,7 +6,7 @@ import { DaybookDB } from '../../src/db/db';
 import {
   addCashFlow, addTrade, createAccount, deleteAccount, deleteTrades, updateTrade, type TradeInput,
 } from '../../src/db/actions';
-import { buildBackup, parseBackup, restoreBackup, serializeBackup, type ParsedBackup } from '../../src/db/backup';
+import { buildBackup, parseBackup, restoreBackup, serializeBackup, UndoConflictError, type ParsedBackup } from '../../src/db/backup';
 import { canonicalDigest, canonicalJSON, sha256Hex } from '../../src/lib/digest';
 import { accountBalance, combinedBalance, summarizeTrades } from '../../src/lib/stats';
 import { buildImportPreview, exportCSV, guessMapping, parseCSV } from '../../src/lib/csv';
@@ -479,5 +479,95 @@ describe('CSV re-import after deletion', () => {
     expect(res.tradeIds[0]).not.toBe(t.id);
     expect(await d.tombstones.get(t.id)).toBeTruthy();
     expect(summarizeTrades(await d.trades.toArray()).netCents).toBe(12_34);
+  });
+});
+
+describe('Undo safety: an undo never overwrites changes made after the operation', () => {
+  async function restored(mode: 'replace' | 'merge') {
+    const d = await freshDb();
+    const L = await createAccount({ name: 'Local', startingBalanceCents: 1_00, startDate: '2026-01-01', color: '#4F8CFF' }, d);
+    const localTrade = (await addTrade(T(L.id, '2026-01-02', 2_00), d)).trade;
+    const o = await freshDb();
+    const B = await createAccount({ name: 'Backup', startingBalanceCents: 0, startDate: '2026-01-01', color: '#4F8CFF' }, o);
+    await addTrade(T(B.id, '2026-02-01', 3_00), o);
+    tick();
+    const r = await restoreBackup(parse(await exportText(o)), mode, d);
+    tick();
+    const trades = await d.trades.toArray();
+    const accounts = await d.accounts.toArray();
+    return { d, r, trades, accounts, localTrade };
+  }
+
+  type Ctx = Awaited<ReturnType<typeof restored>>;
+  const changes: [string, (c: Ctx) => Promise<unknown>][] = [
+    ['a new trade', (c) => addTrade(T(c.accounts[0].id, '2026-03-01', 9_99), c.d)],
+    ['an edited trade', (c) => updateTrade(c.trades[0].id, { pnlCents: -1 }, c.d)],
+    ['a deleted trade', (c) => deleteTrades([c.trades[0].id], c.d)],
+    ['a new transfer', (c) => addCashFlow({ accountId: c.accounts[0].id, date: '2026-03-02', type: 'deposit', amountCents: 5_00, notes: '' }, c.d)],
+    ['an edited account', (c) => import('../../src/db/actions').then((m) => m.updateAccount(c.accounts[0].id, { name: 'Renamed' }, c.d))],
+    ['a deleted account', (c) => deleteAccount(c.accounts[0].id, c.d)],
+  ];
+
+  for (const mode of ['replace', 'merge'] as const) {
+    for (const [what, change] of changes) {
+      it(`${mode}: undo is refused after ${what}, and all current data is kept`, async () => {
+        const c = await restored(mode);
+        await change(c);
+        const current = await snapshot(c.d);
+        await expect(c.r.undo()).rejects.toBeInstanceOf(UndoConflictError);
+        expect(await snapshot(c.d)).toEqual(current);
+      });
+    }
+
+    it(`${mode}: undo still works when nothing changed, and only once`, async () => {
+      const d = await freshDb();
+      const A = await createAccount({ name: 'A', startingBalanceCents: 0, startDate: '2026-01-01', color: '#4F8CFF' }, d);
+      await addTrade(T(A.id, '2026-01-02', 1_00), d);
+      const before = await snapshot(d);
+      const o = await freshDb();
+      const B = await createAccount({ name: 'B', startingBalanceCents: 0, startDate: '2026-01-01', color: '#4F8CFF' }, o);
+      await addTrade(T(B.id, '2026-01-03', 2_00), o);
+      const r = await restoreBackup(parse(await exportText(o)), mode, d);
+      await r.undo();
+      expect(await snapshot(d)).toEqual(before);
+      // a second undo would no longer match the post-restore state → refused, no change
+      await expect(r.undo()).rejects.toBeInstanceOf(UndoConflictError);
+      expect(await snapshot(d)).toEqual(before);
+    });
+  }
+
+  it('CSV import undo is refused if an imported trade was edited/deleted or something was added to a created account', async () => {
+    const setup = async () => {
+      const d = await freshDb();
+      const table = parseCSV('date,account,symbol,pnl\n2026-01-05,NewAcc,AAA,10\n2026-01-06,NewAcc,BBB,-4');
+      const p = buildImportPreview(table, guessMapping(table[0]), { dateOrder: 'auto', defaultAccountId: null, unknownAccounts: 'create', pnlIsGross: false, includeDuplicates: false }, { accounts: [], trades: [], cashflows: [] });
+      const res = await commitImport(p, false, d);
+      tick();
+      return { d, res };
+    };
+    const { undoImport } = await import('../../src/db/importCsv');
+    // untouched → undo removes exactly the import
+    const a = await setup();
+    await undoImport(a.res, a.d);
+    expect(await a.d.trades.count()).toBe(0);
+    expect(await a.d.accounts.count()).toBe(0);
+    // edited
+    const b = await setup();
+    await updateTrade(b.res.tradeIds[0], { notes: 'edited' }, b.d);
+    const sb = await snapshot(b.d);
+    await expect(undoImport(b.res, b.d)).rejects.toBeInstanceOf(UndoConflictError);
+    expect(await snapshot(b.d)).toEqual(sb);
+    // deleted
+    const c = await setup();
+    await deleteTrades([c.res.tradeIds[0]], c.d);
+    const sc = await snapshot(c.d);
+    await expect(undoImport(c.res, c.d)).rejects.toBeInstanceOf(UndoConflictError);
+    expect(await snapshot(c.d)).toEqual(sc);
+    // a manual trade added to the account the import created
+    const e = await setup();
+    await addTrade(T(e.res.accountIds[0], '2026-01-07', 1), e.d);
+    const se = await snapshot(e.d);
+    await expect(undoImport(e.res, e.d)).rejects.toBeInstanceOf(UndoConflictError);
+    expect(await snapshot(e.d)).toEqual(se);
   });
 });

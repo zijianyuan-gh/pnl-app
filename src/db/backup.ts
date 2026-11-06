@@ -247,6 +247,18 @@ export function parseBackup(text: string): ParseBackupResult {
 // Restore
 // ---------------------------------------------------------------------------------------
 
+/**
+ * Thrown by an Undo when the data changed after the operation it would undo. Nothing is
+ * written in that case: the undo is refused rather than silently overwriting newer data.
+ */
+export class UndoConflictError extends Error {
+  readonly code = 'undo_conflict';
+  constructor(message = 'undo_conflict') {
+    super(message);
+    this.name = 'UndoConflictError';
+  }
+}
+
 export interface RestoreResult {
   mode: 'replace' | 'merge';
   /** records written that did not exist locally */
@@ -264,7 +276,11 @@ export interface RestoreResult {
   accounts: number;
   trades: number;
   cashflows: number;
-  /** Restores the database to exactly its state before this restore. */
+  /**
+   * Restores the database to exactly its state before this restore — only if nothing changed
+   * since. If any account/trade/transfer/deletion differs from the post-restore state, it throws
+   * UndoConflictError and writes nothing.
+   */
   undo: () => Promise<void>;
 }
 
@@ -420,6 +436,7 @@ export async function restoreBackup(
   let stats = { added: 0, updated: 0, deleted: 0, kept: 0, unchanged: 0, orphaned: 0 };
   let final!: Snapshot;
   let prevLang: string | null = null;
+  let afterFingerprint = '';
   await d.transaction('rw', [d.accounts, d.trades, d.cashflows, d.tombstones, d.meta], async () => {
     before = await readAll(d);
     prevLang = (await getSettings(d)).lang;
@@ -439,6 +456,7 @@ export async function restoreBackup(
       ({ final, stats } = planMerge(before, incoming));
     }
     await writeVerified(d, final);
+    afterFingerprint = fingerprint(final);
     if (mode === 'replace' && b.lang) await saveSettings({ lang: b.lang as 'en' | 'zh' }, d);
   });
   return {
@@ -449,6 +467,8 @@ export async function restoreBackup(
     cashflows: final.cashflows.length,
     undo: async () => {
       await d.transaction('rw', [d.accounts, d.trades, d.cashflows, d.tombstones, d.meta], async () => {
+        // Check and write in the same transaction, so nothing can slip in between.
+        if (fingerprint(await readAll(d)) !== afterFingerprint) throw new UndoConflictError();
         await writeVerified(d, before);
         if (mode === 'replace') await saveSettings({ lang: prevLang as 'en' | 'zh' | null }, d);
       });

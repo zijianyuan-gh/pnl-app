@@ -13,7 +13,8 @@
     "test:watch": "vitest",
     "e2e": "playwright test",
     "icons": "node scripts/generate-icons.mjs",
-    "screenshots": "node scripts/screenshots.mjs"
+    "screenshots": "node scripts/screenshots.mjs",
+    "check:dist": "node scripts/check-dist.mjs"
   },
   "dependencies": {
     "dexie": "^4.4.7",

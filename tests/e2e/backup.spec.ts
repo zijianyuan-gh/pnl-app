@@ -127,3 +127,27 @@ test('CSV import — mapping, preview, validation and duplicate protection', asy
   await expect(page.getByTestId('csv-summary')).toHaveText('0 new · 3 duplicates · 1 error');
   await expect(page.getByTestId('csv-run')).toBeDisabled();
 });
+
+test('Undo of a restore is refused if data changed meanwhile (second tab) — nothing is overwritten', async ({ page, context }) => {
+  await freshApp(page);
+  await createAccount(page, 'A', '100', '2026-01-01');
+  await gotoTab(page, 'accounts');
+  await page.getByTestId('restore-json').click();
+  await page.getByTestId('restore-file').setInputFiles('tests/fixtures/backup-v1.0.json');
+  await page.getByTestId('restore-mode-merge').click();
+  await page.getByTestId('restore-run').click();
+  await expect(page.getByTestId('total-balance')).toHaveText('$1,726.69'); // 100 + v1.0 fixture 1,626.69
+
+  // Meanwhile, in another tab of the same app, a trade is recorded
+  const other = await context.newPage();
+  await other.goto('/');
+  await addEntry(other, { account: 'A', amount: '5', date: '2026-02-02' });
+  await other.close();
+  await expect(page.getByTestId('total-balance')).toHaveText('$1,731.69');
+
+  // The stale Undo from the restore must not wipe that trade
+  await page.getByRole('status').getByRole('button', { name: 'Undo' }).click();
+  await expect(page.getByRole('status')).toContainText('Can’t undo');
+  await expect(page.getByTestId('total-balance')).toHaveText('$1,731.69');
+  await expect(page.locator('#screen-accounts')).toContainText('3 accounts · 4 trades · 2 transfers');
+});

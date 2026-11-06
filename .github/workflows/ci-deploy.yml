@@ -1,11 +1,14 @@
-# CI on every push / PR; deployment to Cloudflare Pages ONLY after a one-time opt-in.
+# CI on every push / PR. Deployment to Cloudflare Pages happens ONLY after all tests pass
+# AND the repository owner has added ONE secret (that is the explicit opt-in):
 #
-# Nothing is deployed until ALL of these exist (Repo → Settings → Secrets and variables → Actions):
-#   secret   CLOUDFLARE_API_TOKEN   – Cloudflare API token with "Cloudflare Pages: Edit" only
-#   secret   CLOUDFLARE_ACCOUNT_ID  – your Cloudflare account id
-#   variable DEPLOY_ENABLED = true
-# Site: https://<CF_PAGES_PROJECT>.pages.dev  (project name below; keep it forever — browser
-# data is tied to the exact origin, so changing the address later strands your on-device data).
+#   Settings → Secrets and variables → Actions → New repository secret
+#     CLOUDFLARE_API_TOKEN   Cloudflare API token with only "Account · Cloudflare Pages · Edit"
+#   (optional) CLOUDFLARE_ACCOUNT_ID — only needed if the token can see more than one account.
+#
+# Without the secret the deploy job does nothing and says so in the run summary.
+# The site address is chosen by Cloudflare from CF_PAGES_PROJECT (".pages.dev"); the real
+# address is read back from Cloudflare after deploying and smoke-tested. Keep it forever:
+# on-device data is tied to the exact origin.
 name: CI & deploy
 
 on:
@@ -19,7 +22,8 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # never cancel a running deploy on main; superseded PR runs may be cancelled
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CF_PAGES_PROJECT: daybook-pnl
@@ -27,7 +31,7 @@ env:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -46,31 +50,105 @@ jobs:
           PW_WEBKIT: '1'
       - name: Production build
         run: npm run build
+      - name: Release gate — no test data, backups or secrets in the build
+        run: npm run check:dist
       - uses: actions/upload-artifact@v4
         with:
           name: dist
           path: dist
           retention-days: 7
 
+  pages-name:
+    # Informational: is <project>.pages.dev already serving something?
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Probe pages.dev address
+        run: |
+          probe() { curl -s -o "/tmp/$1.html" -w '%{http_code}' -m 20 "https://$1.pages.dev/" || echo 000; }
+          name="$CF_PAGES_PROJECT"
+          control="zz-unused-$(openssl rand -hex 8)"
+          a=$(probe "$name"); b=$(probe "$control")
+          if grep -q 'Daybook — P&amp;L Journal' "/tmp/$name.html" 2>/dev/null; then verdict="serving Daybook (deployed)"
+          elif [ "$a" = "$b" ]; then verdict="free — behaves like a never-used name (HTTP $a)"
+          else verdict="TAKEN by another site (HTTP $a vs $b for an unused name) — Cloudflare would assign a suffixed address"; fi
+          echo "https://$name.pages.dev → $verdict" | tee -a "$GITHUB_STEP_SUMMARY"
+
   deploy:
     needs: test
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     environment:
       name: production
-      url: https://${{ env.CF_PAGES_PROJECT }}.pages.dev
+      url: ${{ steps.publish.outputs.url }}
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      ACCOUNT_ID_SECRET: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
+      - name: Opt-in check
+        id: gate
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "### Not deployed — secret CLOUDFLARE_API_TOKEN is not set (this is the opt-in). Tests passed; nothing was published." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/download-artifact@v4
+        if: steps.gate.outputs.enabled == 'true'
         with:
           name: dist
           path: dist
-      - name: Create the Pages project on first run (no-op afterwards)
-        run: npx --yes wrangler@4 pages project create "$CF_PAGES_PROJECT" --production-branch=main || true
+
+      - name: Resolve Cloudflare account
+        id: account
+        if: steps.gate.outputs.enabled == 'true'
+        run: |
+          if [ -n "$ACCOUNT_ID_SECRET" ]; then id="$ACCOUNT_ID_SECRET"; else
+            if ! resp=$(curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "https://api.cloudflare.com/client/v4/accounts?per_page=50"); then
+              echo "::error::This token cannot list accounts. Add secret CLOUDFLARE_ACCOUNT_ID (Cloudflare dashboard → Account home → ⋯ next to the account → Copy account ID)."; exit 1
+            fi
+            n=$(jq '.result | length' <<<"$resp")
+            if [ "$n" != "1" ]; then echo "::error::The token can see $n Cloudflare accounts; add secret CLOUDFLARE_ACCOUNT_ID to choose one."; exit 1; fi
+            id=$(jq -r '.result[0].id' <<<"$resp")
+          fi
+          echo "::add-mask::$id"
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+
+      - name: Create the Pages project if it doesn't exist yet
+        if: steps.gate.outputs.enabled == 'true'
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      - name: Deploy tested build
+          ACC: ${{ steps.account.outputs.id }}
+        run: |
+          api="https://api.cloudflare.com/client/v4/accounts/$ACC/pages/projects"
+          code=$(curl -s -o p.json -w '%{http_code}' -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" "$api/$CF_PAGES_PROJECT")
+          if [ "$code" = "200" ]; then echo "Project exists."; exit 0; fi
+          if [ "$code" != "404" ]; then echo "::error::Cloudflare API returned HTTP $code"; jq -c '.errors' p.json || true; exit 1; fi
+          curl -fsS -X POST -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" -H "Content-Type: application/json" \
+            --data "{\"name\":\"$CF_PAGES_PROJECT\",\"production_branch\":\"main\"}" "$api" | jq -c '{success, subdomain: .result.subdomain, errors}'
+
+      - name: Deploy the tested build
+        if: steps.gate.outputs.enabled == 'true'
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ steps.account.outputs.id }}
         run: npx --yes wrangler@4 pages deploy dist --project-name="$CF_PAGES_PROJECT" --branch=main --commit-dirty=true
+
+      - name: Read the real address and smoke-test it
+        id: publish
+        if: steps.gate.outputs.enabled == 'true'
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          ACC: ${{ steps.account.outputs.id }}
+        run: |
+          sub=$(curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$ACC/pages/projects/$CF_PAGES_PROJECT" | jq -r '.result.subdomain')
+          url="https://$sub"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          for i in $(seq 1 20); do
+            if curl -fsS -m 20 "$url/" -o index.html && grep -q 'Content-Security-Policy' index.html && curl -fsS -m 20 -o /dev/null "$url/sw.js"; then
+              echo "### Live: $url" >> "$GITHUB_STEP_SUMMARY"; exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::Deployed, but $url did not serve the app within 5 minutes"; exit 1

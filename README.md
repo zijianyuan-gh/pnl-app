@@ -39,6 +39,8 @@ CI（`.github/workflows/ci-deploy.yml`）在每次推送时运行类型检查、
 
 ## iPhone 真机验收（约 10 分钟）
 
+更简短的版本见 [docs/iPhone安装与验收指南.md](docs/iPhone安装与验收指南.md)。
+
 部署到 HTTPS 地址后，在 iPhone 上按顺序做一遍。任何一步不符合预期，请不要开始记录真实数据。
 
 1. **安装**：Safari 打开地址 → 分享 → 添加到主屏幕 → 从主屏幕图标打开。「账户 → 数据与备份」应显示「正在以主屏幕 App 方式运行」。
@@ -83,19 +85,19 @@ npm run e2e          # E2E（Playwright，自动构建并启动预览）；PW_WE
 
 选择 Cloudflare Pages 的独立 `*.pages.dev` 地址，使这款财务 App 拥有**自己独立的 Web Origin**（不与其他网站共享存储）。GitHub Pages 的 `<用户名>.github.io` 由你所有 Pages 站点共享同一个 Origin，因此只作为备选（`deploy/github-pages.yml`，未启用）。
 
-工作流 `.github/workflows/ci-deploy.yml`：每次推送都运行类型检查、单元测试、Chromium + WebKit E2E 和生产构建；**只有全部通过、并且你完成下面的一次性授权后**才会部署到 `https://daybook-pnl.pages.dev`。未授权时它只跑测试，不发布任何东西。
+工作流 `.github/workflows/ci-deploy.yml`：每次推送都运行类型检查、单元测试、Chromium + WebKit E2E、生产构建和发布检查（`npm run check:dist`：构建中不得含测试交易、备份文件或密钥，且必须带 CSP）。**只有全部通过、且仓库中存在 `CLOUDFLARE_API_TOKEN` 这个 secret 时**才会部署；没有它时只跑测试，运行摘要里写明「Not deployed」。部署后工作流从 Cloudflare 读取**实际分配的地址**并做线上冒烟测试，地址写在运行摘要的 `Live: https://…` 中。
 
-**需要你完成的一次性授权（我没有执行）：**
+**你需要完成的唯一一次授权：**
 
-1. 注册/登录免费的 Cloudflare 账户。
-2. Cloudflare → My Profile → API Tokens → Create Token → 自定义，仅授予 **Account · Cloudflare Pages · Edit** 权限。
-3. GitHub 仓库 → Settings → Secrets and variables → Actions：
-   - Secrets：`CLOUDFLARE_API_TOKEN`（上一步的 token）、`CLOUDFLARE_ACCOUNT_ID`（Cloudflare 控制台右侧的 Account ID）；
-   - Variables：`DEPLOY_ENABLED` = `true`。
-4. 在 Actions 页面手动运行一次 “CI & deploy”，或推送到 `main`。
+1. 登录（或免费注册）Cloudflare → 右上角头像 → **My Profile → API Tokens → Create Token → Create Custom Token**。
+2. 名称随意（如 `daybook-pages`）；Permissions 选 **Account · Cloudflare Pages · Edit**（只选这一项）；Account Resources 选你的账户；其余默认 → **Continue to summary → Create Token**，复制 token（只显示一次）。
+3. GitHub 仓库 → **Settings → Secrets and variables → Actions → New repository secret**：Name 填 `CLOUDFLARE_API_TOKEN`，Secret 粘贴 token → **Add secret**。
+4. **Actions → CI & deploy → Run workflow**（或等下一次推送）。约 6–8 分钟后，在运行摘要中看到 `Live: https://…` 即为正式地址。
+
+账户 ID 会从 token 自动识别；只有当 token 能看到多个 Cloudflare 账户时，才需要再添加 secret `CLOUDFLARE_ACCOUNT_ID`。token 只保存在 GitHub Secrets 中，不会出现在代码或日志里；不需要时可在 Cloudflare 中随时吊销。
 
 注意：
-- 项目名 `daybook-pnl` 若已被他人占用，Cloudflare 会分配带后缀的地址，以实际地址为准。**确定地址后不要再更换**：浏览器数据与 Origin 绑定，换地址等于换了一个空 App（只能靠备份迁移）。
+- 项目名 `daybook-pnl`；每次 CI 的 `pages-name` 任务会检查 `daybook-pnl.pages.dev` 是否已被占用。若被占用，Cloudflare 会分配带后缀的地址，以运行摘要中的实际地址为准。**确定地址后不要再更换**：浏览器数据与 Origin 绑定，换地址等于换了一个空 App（只能靠备份迁移）。
 - 部署内容只有静态代码，不包含任何个人数据；任何人都能打开这个（空的）应用，但只能看到他们自己设备里的数据。
 - 不涉及你已有的其他域名或服务。
 
@@ -104,7 +106,7 @@ npm run e2e          # E2E（Playwright，自动构建并启动预览）；PW_WE
 **备份**：账户 → 数据与备份 → 导出完整备份（JSON）。iPhone 上会先生成文件，再点「分享 / 存储到“文件”」打开 iOS 分享面板，选择「存储到“文件”」→ iCloud 云盘或“我的 iPhone”。**Daybook 无法自行写入 iCloud 云盘**，必须由你在分享面板中保存。超过 14 天未备份会提醒。
 
 **恢复**：账户 → 从备份恢复 → 选择文件 → 查看摘要与校验结果 → 选择：
-- **替换当前全部数据**：用于换机或清空后恢复（二次确认，可立即撤销）；
+- **替换当前全部数据**：用于换机或清空后恢复（二次确认，可立即撤销；若恢复后数据又有改动，撤销会被拒绝，现有数据全部保留）；
 - **合并到当前数据**：按记录合并，不产生重复（规则见下）。
 
 **备份安全说明**：备份文件**未加密**，包含完整交易记录。请只保存在你信任的私密位置（如自己的 iCloud 云盘），不要通过邮件、聊天软件发送，也不要提交到 Git 仓库（`.gitignore` 已排除 `daybook-backup-*.json` 与 `daybook-trades-*.csv`）。
@@ -120,7 +122,7 @@ npm run e2e          # E2E（Playwright，自动构建并启动预览）；PW_WE
 
 ## 数据丢失风险评估
 
-已覆盖：恢复失败回滚、损坏备份拒绝、未保存记录草稿保护（更新、iOS 杀后台、误关闭）、删除/恢复/导入均可撤销、清空与删除账户需输入确认、导出前自检、新版本不会自动刷新打断输入、数据库升级不清空数据（只追加 schema 版本）。
+已覆盖：恢复失败回滚、撤销不会覆盖之后的新数据（恢复与 CSV 导入）、损坏备份拒绝、未保存记录草稿保护（更新、iOS 杀后台、误关闭）、删除/恢复/导入均可撤销、清空与删除账户需输入确认、导出前自检、新版本不会自动刷新打断输入、数据库升级不清空数据（只追加 schema 版本）。
 
 仍然存在、需要你配合的风险：
 - **设备丢失、删除主屏幕 App、清除 Safari 网站数据** 都会删除本地数据 → 定期导出备份到 iCloud 云盘。
@@ -157,7 +159,7 @@ React 19 + TypeScript + Vite 8 + Tailwind CSS 4；IndexedDB（Dexie 4）；vite-
 npm run typecheck && npm test && npm run e2e
 ```
 
-- 单元测试 65 项：金额（含小数逗号与非法分组）、日期、统计、CSV、账务场景 A/B/C、SHA-256（对照 Node crypto）、逐字段篡改检测、v1.0 兼容、事务回滚、合并规则 R1–R6、双设备收敛、精度与余额边界。
+- 单元测试 80 项：金额（含小数逗号与非法分组）、日期、统计、CSV、账务场景 A/B/C、SHA-256（对照 Node crypto）、逐字段篡改检测、v1.0 兼容、事务回滚、合并规则 R1–R6、双设备收敛、精度与余额边界、撤销冲突（恢复后新增/修改/删除交易、资金、账户及 CSV 导入后修改时，撤销被拒绝且数据不变）。
 - E2E（Chromium，iPhone 14 模拟 + 桌面）：账务、编辑删除撤销、备份恢复（含 v1.0 文件与撤销）、CSV 导入、时区、布局、PWA 离线与更新、**真实交易全生命周期验收**、iPhone 专项（分享面板手势、无分享面板时下载、键盘遮挡、安全区、草稿、小数逗号、主屏幕模式、axe 无障碍）、安全（同源、CSP、XSS）。
 
 ## 已知限制

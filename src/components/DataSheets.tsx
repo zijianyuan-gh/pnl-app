@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle2, FileJson, FileSpreadsheet, Share } from 'lucide-react';
 import { useApp } from '../state/app';
 import { fmt } from '../i18n';
-import { parseBackup, restoreBackup, type ParsedBackup } from '../db/backup';
+import { parseBackup, restoreBackup, UndoConflictError, type ParsedBackup } from '../db/backup';
 import { commitImport, undoImport } from '../db/importCsv';
 import { buildImportPreview, guessMapping, IMPORT_FIELDS, parseCSV, type ImportField, type ImportOptions, type Mapping } from '../lib/csv';
 import { formatDate, type DateOrder } from '../lib/dates';
@@ -12,6 +12,23 @@ import { Button, FieldLabel, Money, Segmented, Sheet, cx } from './ui';
 
 /** Refuse absurdly large files instead of freezing the phone (≈ 200k trades as JSON). */
 const MAX_IMPORT_BYTES = 50 * 1024 * 1024;
+
+/** Run an Undo; if data changed since, explain that nothing was overwritten. */
+function useSafeUndo() {
+  const { T, toast } = useApp();
+  return (fn: () => Promise<void>) => async () => {
+    try {
+      await fn();
+      toast({ message: T.data.undoDone, tone: 'success' });
+    } catch (e) {
+      toast({
+        message: e instanceof UndoConflictError ? T.data.undoConflict : fmt(T.errors.generic, { msg: (e as Error).message }),
+        tone: 'error',
+        duration: 9000,
+      });
+    }
+  };
+}
 
 // ---------------- Export (phones) ----------------
 
@@ -79,6 +96,7 @@ export function ExportSheet({
 
 export function RestoreSheet({ open, onClose, onExportFirst }: { open: boolean; onClose: () => void; onExportFirst: () => void }) {
   const { T, locale, accounts, trades, toast, confirm } = useApp();
+  const safeUndo = useSafeUndo();
   const [backup, setBackup] = useState<ParsedBackup | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<'replace' | 'merge'>('replace');
@@ -142,7 +160,7 @@ export function RestoreSheet({ open, onClose, onExportFirst }: { open: boolean; 
             ? fmt(T.data.restoreDone, { a: r.accounts, t: r.trades, f: r.cashflows })
             : fmt(T.data.mergeDone, { added: r.added, updated: r.updated, deleted: r.deleted, kept: r.kept }),
         tone: 'success',
-        action: { label: T.common.undo, onClick: r.undo },
+        action: { label: T.common.undo, onClick: safeUndo(r.undo) },
         duration: 10_000,
       });
       close();
@@ -243,6 +261,7 @@ const PREVIEW_ROWS = 100;
 
 export function CsvImportSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { T, locale, accounts, trades, cashflows, toast } = useApp();
+  const safeUndo = useSafeUndo();
   const [table, setTable] = useState<string[][] | null>(null);
   const [fileName, setFileName] = useState('');
   const [mapping, setMapping] = useState<Mapping | null>(null);
@@ -307,7 +326,7 @@ export function CsvImportSheet({ open, onClose }: { open: boolean; onClose: () =
       toast({
         message: fmt(T.csv.imported, { t: res.trades, f: res.cashflows }),
         tone: 'success',
-        action: { label: T.common.undo, onClick: () => undoImport(res) },
+        action: { label: T.common.undo, onClick: safeUndo(() => undoImport(res)) },
       });
       close();
     } catch (e) {

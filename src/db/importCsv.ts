@@ -2,6 +2,7 @@ import { db as defaultDb, type DaybookDB } from './db';
 import { ACCOUNT_COLORS, newId, type Account, type CashFlow, type Trade } from './types';
 import { normalizeAccount, normalizeCashFlow, normalizeTrade } from './validate';
 import type { ImportPreview } from '../lib/csv';
+import { UndoConflictError } from './backup';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -12,6 +13,8 @@ export interface CommitResult {
   tradeIds: string[];
   flowIds: string[];
   accountIds: string[];
+  /** updatedAt written by the import; a different value later means the record was edited */
+  importedAt: number;
 }
 
 /** Write an import preview to the database in one atomic transaction. */
@@ -21,7 +24,7 @@ export async function commitImport(
   d: DaybookDB = defaultDb,
 ): Promise<CommitResult> {
   const now = Date.now();
-  const res: CommitResult = { trades: 0, cashflows: 0, accountsCreated: 0, tradeIds: [], flowIds: [], accountIds: [] };
+  const res: CommitResult = { trades: 0, cashflows: 0, accountsCreated: 0, tradeIds: [], flowIds: [], accountIds: [], importedAt: now };
   await d.transaction('rw', [d.accounts, d.trades, d.cashflows, d.tombstones], async () => {
     const refToId = new Map<string, string>();
     let order = await d.accounts.count();
@@ -86,8 +89,23 @@ export async function commitImport(
   return res;
 }
 
+/**
+ * Remove exactly what an import added — refused (UndoConflictError, nothing written) if any
+ * imported record was edited or deleted since, or anything new was put into a created account.
+ */
 export async function undoImport(r: CommitResult, d: DaybookDB = defaultDb): Promise<void> {
   await d.transaction('rw', [d.accounts, d.trades, d.cashflows], async () => {
+    const trades = await d.trades.bulkGet(r.tradeIds);
+    const flows = await d.cashflows.bulkGet(r.flowIds);
+    const accounts = await d.accounts.bulkGet(r.accountIds);
+    const untouched = [...trades, ...flows, ...accounts].every((x) => x && x.updatedAt === r.importedAt);
+    const created = new Set(r.accountIds);
+    const imported = new Set([...r.tradeIds, ...r.flowIds]);
+    const othersInCreated =
+      created.size > 0 &&
+      ((await d.trades.where('accountId').anyOf([...created]).filter((t) => !imported.has(t.id)).count()) > 0 ||
+        (await d.cashflows.where('accountId').anyOf([...created]).filter((c) => !imported.has(c.id)).count()) > 0);
+    if (!untouched || othersInCreated) throw new UndoConflictError();
     await d.trades.bulkDelete(r.tradeIds);
     await d.cashflows.bulkDelete(r.flowIds);
     await d.accounts.bulkDelete(r.accountIds);
