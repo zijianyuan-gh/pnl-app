@@ -180,13 +180,30 @@ function AppLockGate() {
     }
   }, [T]);
 
+  const lockedRef = useRef(locked);
+  lockedRef.current = locked;
+
+  // Lock when the app goes to the background. iOS reports it to native code ("lockRequired");
+  // the page's own visibility event is a second trigger (it can be missed in some transitions).
   useEffect(() => {
     const onVis = () => {
       if (document.visibilityState === 'hidden' && enabledRef.current && !inFlight.current) setLocked(true);
     };
     document.addEventListener('visibilitychange', onVis);
-    return () => document.removeEventListener('visibilitychange', onVis);
+    const sub = DaybookNative.addListener('lockRequired', () => {
+      if (enabledRef.current && !lockedRef.current) setLocked(true); // acknowledged below once drawn
+      else void DaybookNative.lockShown().catch(() => {});
+    });
+    return () => {
+      document.removeEventListener('visibilitychange', onVis);
+      void sub.then((h) => h.remove()).catch(() => {});
+    };
   }, []);
+
+  // The lock screen is drawn: the native privacy cover can be removed
+  useEffect(() => {
+    if (locked) void DaybookNative.lockShown().catch(() => {});
+  }, [locked]);
 
   // Ask right away when the locked app comes to the front
   useEffect(() => {

@@ -50,9 +50,23 @@ describe('iOS app configuration', () => {
     expect(scene).toContain('rootViewController = DaybookViewController()');
     expect(scene).not.toMatch(/rootViewController = CAPBridgeViewController\(\)/);
     expect(readFileSync('ios/App/App/Base.lproj/Main.storyboard', 'utf8')).toContain('customClass="DaybookViewController"');
-    expect(readFileSync('ios/App/App/DaybookViewController.swift', 'utf8')).toContain('registerPluginInstance(DaybookNativePlugin())');
+    const vc = readFileSync('ios/App/App/DaybookViewController.swift', 'utf8');
+    expect(vc).toContain('private let daybook = DaybookNativePlugin()');
+    expect(vc).toContain('registerPluginInstance(daybook)');
     expect(pbx).toContain('DaybookNativePlugin.swift in Sources');
     expect(pbx).toContain('AppUITests.swift in Sources');
+  });
+
+  it('App Lock is triggered by iOS itself when the app goes to the background', () => {
+    const vc = readFileSync('ios/App/App/DaybookViewController.swift', 'utf8');
+    const plugin = readFileSync('ios/App/App/DaybookNativePlugin.swift', 'utf8');
+    const web = readFileSync('src/native/services.tsx', 'utf8');
+    expect(vc).toMatch(/didEnterBackgroundNotification[\s\S]*daybook\.requestLock\(\)/);
+    expect(plugin).toContain('notifyListeners("lockRequired"');
+    expect(plugin).toContain('CAPPluginMethod(name: "lockShown"');
+    expect(web).toContain("addListener('lockRequired'");
+    // the privacy cover is removed only after the lock screen is drawn (or a 2 s fallback)
+    expect(vc).toContain('holdCoverUntilLocked');
   });
 
   it('privacy policy and support pages exist (App Store 5.1.1 requires the policy link in the app)', () => {

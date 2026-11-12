@@ -4,10 +4,14 @@ import Capacitor
 /// Hosts the bundled web app (capacitor://localhost, served from the app bundle — never from the
 /// network), registers the Daybook native plugin, and keeps the status bar readable on the dark UI.
 class DaybookViewController: CAPBridgeViewController {
+    private let daybook = DaybookNativePlugin()
     private var cover: UIView?
+    /// Back from the background with App Lock on: keep the cover until the lock screen is drawn.
+    private var holdCoverUntilLocked = false
+    private var coverGeneration = 0
 
     override func capacitorDidLoad() {
-        bridge?.registerPluginInstance(DaybookNativePlugin())
+        bridge?.registerPluginInstance(daybook)
         NSLog("Daybook: native plugin registered")
         #if DEBUG
         seedForUITests()
@@ -20,6 +24,8 @@ class DaybookViewController: CAPBridgeViewController {
         let nc = NotificationCenter.default
         nc.addObserver(self, selector: #selector(willResignActive), name: UIApplication.willResignActiveNotification, object: nil)
         nc.addObserver(self, selector: #selector(didBecomeActive), name: UIApplication.didBecomeActiveNotification, object: nil)
+        nc.addObserver(self, selector: #selector(didEnterBackground), name: UIApplication.didEnterBackgroundNotification, object: nil)
+        nc.addObserver(self, selector: #selector(lockShown), name: DaybookNativePlugin.lockShownNotification, object: nil)
     }
 
     // Status bar: light content on the dark UI, set in Info.plist (UIStatusBarStyle) because
@@ -39,6 +45,24 @@ class DaybookViewController: CAPBridgeViewController {
         v.addSubview(icon)
         view.addSubview(v)
         cover = v
+        coverGeneration += 1
+    }
+
+    /// App Lock on: ask the web app to lock now, while iOS is moving it to the background.
+    @objc private func didEnterBackground() {
+        guard UserDefaults.standard.bool(forKey: DaybookNativePlugin.privacyCoverKey) else { return }
+        holdCoverUntilLocked = true
+        daybook.requestLock()
+    }
+
+    @objc private func lockShown() {
+        removeCover()
+    }
+
+    private func removeCover() {
+        holdCoverUntilLocked = false
+        cover?.removeFromSuperview()
+        cover = nil
     }
 
     #if DEBUG
@@ -63,7 +87,12 @@ class DaybookViewController: CAPBridgeViewController {
     #endif
 
     @objc private func didBecomeActive() {
-        cover?.removeFromSuperview()
-        cover = nil
+        guard holdCoverUntilLocked else { return removeCover() }
+        // the web app answers with lockShown; never keep the cover longer than 2 s
+        let generation = coverGeneration
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+            guard let self = self, self.holdCoverUntilLocked, self.coverGeneration == generation else { return }
+            self.removeCover()
+        }
     }
 }

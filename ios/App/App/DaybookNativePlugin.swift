@@ -18,11 +18,13 @@ public class DaybookNativePlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerD
         CAPPluginMethod(name: "biometry", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "authenticate", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setPrivacyCover", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "lockShown", returnType: CAPPluginReturnPromise),
     ]
 
     static let snapshotName = "Daybook Auto-Backup.json"
     static let previousSnapshotName = "Daybook Auto-Backup (previous day).json"
     static let privacyCoverKey = "daybook.privacyCover"
+    static let lockShownNotification = Notification.Name("DaybookLockShown")
     private static let maxImportBytes = 50 * 1024 * 1024
 
     private var pickCall: CAPPluginCall?
@@ -231,6 +233,22 @@ public class DaybookNativePlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerD
     /// When enabled, the app switcher shows a plain cover instead of a snapshot of your trades.
     @objc func setPrivacyCover(_ call: CAPPluginCall) {
         UserDefaults.standard.set(call.getBool("enabled") ?? false, forKey: Self.privacyCoverKey)
+        call.resolve()
+    }
+
+    // MARK: - App Lock trigger
+
+    /// Called by the view controller when the app has gone to the background with App Lock on.
+    /// iOS tells native code reliably; the web page's own visibility event can be missed.
+    func requestLock() {
+        notifyListeners("lockRequired", data: [:])
+    }
+
+    /// The web app has drawn its lock screen: the privacy cover can go.
+    @objc func lockShown(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            NotificationCenter.default.post(name: Self.lockShownNotification, object: nil)
+        }
         call.resolve()
     }
 }
