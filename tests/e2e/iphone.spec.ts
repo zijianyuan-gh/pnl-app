@@ -187,7 +187,8 @@ test('VoiceOver semantics and WCAG AA contrast (axe-core) on every screen and th
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   });
   const cell = page.getByTestId(`day-${today}`);
-  await expect(cell).toHaveAccessibleName(/November 6.*\+\$124\.50, 2 trades/);
+  const spokenDate = new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' }).format(new Date(`${today}T00:00:00Z`));
+  await expect(cell).toHaveAccessibleName(`${spokenDate}, +$124.50, 2 trades`);
   await expect(cell).toHaveAttribute('aria-current', 'date');
   await expect(cell).toContainText('+$125');
 });

@@ -1,0 +1,2 @@
+"CFBundleDisplayName" = "Daybook";
+"NSFaceIDUsageDescription" = "仅在你开启“应用锁”时，Daybook 使用面容 ID 解锁应用。面容数据不会离开 Apple 的安全硬件。";

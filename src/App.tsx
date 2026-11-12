@@ -11,6 +11,8 @@ import { ConfirmDialog, Toasts } from './components/overlays';
 import { requestPersistentStorage } from './db/db';
 import { cx } from './components/ui';
 import { primeKeyboard } from './lib/keyboard';
+import { isNative } from './native/bridge';
+import { NativeServices } from './native/services';
 
 type Tab = 'calendar' | 'trades' | 'analytics' | 'accounts';
 const TABS: Tab[] = ['calendar', 'trades', 'analytics', 'accounts'];
@@ -79,7 +81,8 @@ export default function App() {
 
   return (
     <div className="flex h-full flex-col">
-      <UpdateBanner />
+      {/* the iOS app updates through the App Store; only the web version has a service worker */}
+      {!isNative() && <UpdateBanner />}
       <main className="relative min-h-0 flex-1">
         {TABS.map((t) => (
           <div
@@ -100,6 +103,7 @@ export default function App() {
       <QuickAddSheet />
       <ConfirmDialog />
       <Toasts />
+      <NativeServices />
     </div>
   );
 }

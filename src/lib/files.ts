@@ -1,3 +1,5 @@
+import { DaybookNative, isNative } from '../native/bridge';
+
 export type SaveOutcome = 'shared' | 'downloaded' | 'cancelled';
 
 export function isTouchDevice(): boolean {
@@ -23,6 +25,11 @@ export function canShareFile(file: File): boolean {
  * file must be built beforehand (see ExportSheet).
  */
 export async function deliverFile(file: File, preferShare = isTouchDevice()): Promise<SaveOutcome> {
+  if (isNative()) {
+    // iOS app: native share sheet ("Save to Files", AirDrop, …); no browser download exists here
+    const r = await DaybookNative.shareFile({ name: file.name, text: await readFileText(file), mime: file.type });
+    return r.completed ? 'shared' : 'cancelled';
+  }
   if (preferShare && canShareFile(file)) {
     try {
       await navigator.share({ files: [file], title: file.name });

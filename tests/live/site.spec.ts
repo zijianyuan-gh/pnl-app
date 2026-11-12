@@ -2,6 +2,8 @@ import { expect, test } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { addEntry, createAccount, freshApp, gotoTab } from '../e2e/helpers';
 
+const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
 const SHA = process.env.EXPECT_SHA;
 
 test('the live site is the build that was just deployed, over HTTPS, with PWA assets', async ({ page, request, baseURL }) => {
@@ -55,7 +57,7 @@ test('saved data survives quitting, works offline (service worker), and export â
   await page.evaluate(() => navigator.serviceWorker.ready);
   await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller), { timeout: 20_000 }).toBe(true);
   await createAccount(page, 'Real', '2500', '2026-01-01');
-  await addEntry(page, { amount: '1234.56', date: '2026-11-05', symbol: 'NVDA', fees: '1.23' });
+  await addEntry(page, { amount: '1234.56', date: iso(new Date()), symbol: 'NVDA', fees: '1.23' });
   await page.close();
   page = await context.newPage();
   await page.goto('./');
@@ -70,7 +72,7 @@ test('saved data survives quitting, works offline (service worker), and export â
   page = await context.newPage();
   await page.goto('./');
   await expect(page.getByTestId('header-balance')).toHaveText('$3,734.56');
-  await addEntry(page, { amount: '34.56', loss: true, date: '2026-11-06' });
+  await addEntry(page, { amount: '34.56', loss: true, date: iso(new Date(Date.now() - 86_400_000)) });
   await expect(page.getByTestId('header-balance')).toHaveText('$3,700.00');
   if (emulateOffline) await context.setOffline(false);
 

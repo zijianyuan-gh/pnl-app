@@ -165,7 +165,7 @@ export async function deleteCashFlows(ids: string[], d: DaybookDB = defaultDb): 
 
 // ---------- Settings / wipe ----------
 
-export const DEFAULT_SETTINGS: Settings = { lang: null, lastBackupAt: null };
+export const DEFAULT_SETTINGS: Settings = { lang: null, lastBackupAt: null, appLock: false, erasedAt: null };
 
 export async function getSettings(d: DaybookDB = defaultDb): Promise<Settings> {
   const row = await d.meta.get('settings');
@@ -184,7 +184,8 @@ export async function eraseAllData(d: DaybookDB = defaultDb): Promise<void> {
     await Promise.all([d.accounts.clear(), d.trades.clear(), d.cashflows.clear(), d.tombstones.clear()]);
     const s = await getSettings(d);
     await d.meta.clear();
-    // keep only the language preference
-    await d.meta.put({ key: 'settings', value: { ...DEFAULT_SETTINGS, lang: s.lang } });
+    // keep the language and App Lock; remember when this happened so older automatic
+    // backup copies (iOS app) are not offered back
+    await d.meta.put({ key: 'settings', value: { ...DEFAULT_SETTINGS, lang: s.lang, appLock: s.appLock ?? false, erasedAt: Date.now() } });
   });
 }

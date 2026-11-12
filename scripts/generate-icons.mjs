@@ -21,5 +21,7 @@ await render(svg, 192, 'icon-192.png');
 await render(svg, 512, 'icon-512.png');
 await render(maskable, 512, 'icon-maskable-512.png');
 await render(square, 180, 'apple-touch-icon.png');
+// iOS app: full-bleed 1024 master (alpha is removed in scripts/ios-assets.py)
+await render(square, 1024, 'ios-appicon-1024.png');
 await browser.close();
 console.log('icons written');

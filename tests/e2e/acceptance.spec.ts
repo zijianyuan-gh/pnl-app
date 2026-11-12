@@ -9,7 +9,12 @@ import { serveDistCopy } from './server';
  */
 test.beforeEach(({}, info) => test.skip(info.project.name !== 'desktop-chromium', 'downloads + SW automation: desktop Chromium'));
 
-const TRADE = { account: 'Real', amount: '1234.56', date: '2026-11-05', symbol: 'NVDA', fees: '1.23', tag: 'swing' };
+// Dates relative to today, so the trade is always in the month the calendar opens on
+const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const TODAY = iso(new Date());
+const YESTERDAY = iso(new Date(Date.now() - 86_400_000));
+const TODAY_LABEL = new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }).format(new Date());
+const TRADE = { account: 'Real', amount: '1234.56', date: TODAY, symbol: 'NVDA', fees: '1.23', tag: 'swing' };
 
 async function waitForSW(page: Page) {
   await page.evaluate(() => navigator.serviceWorker.ready);
@@ -20,19 +25,19 @@ async function waitForSW(page: Page) {
 async function expectTradeExact(page: Page, balance: string) {
   await gotoTab(page, 'calendar');
   await expect(page.getByTestId('header-balance')).toHaveText(balance);
-  await expect(page.getByTestId('day-2026-11-05')).toHaveAttribute('data-pnl', '123456');
+  await expect(page.getByTestId(`day-${TODAY}`)).toHaveAttribute('data-pnl', '123456');
   await gotoTab(page, 'trades');
   await page.getByTestId('trades-search').fill('NVDA');
   const row = page.locator('#screen-trades [data-testid=trade-row]');
   await expect(row).toHaveCount(1);
   await expect(row).toContainText('+$1,234.56');
   await expect(row).toContainText('Fees $1.23');
-  await expect(page.locator('#screen-trades')).toContainText('Thu, Nov 5, 2026');
+  await expect(page.locator('#screen-trades')).toContainText(TODAY_LABEL);
   await row.click();
   const qa = page.getByTestId('quick-add');
   await expect(qa.getByTestId('qa-amount')).toHaveValue('1234.56');
   await expect(qa.getByTestId('sign-profit')).toHaveAttribute('aria-checked', 'true');
-  await expect(qa.getByTestId('qa-date')).toHaveValue('2026-11-05');
+  await expect(qa.getByTestId('qa-date')).toHaveValue(TODAY);
   await expect(qa.getByTestId('qa-symbol')).toHaveValue('NVDA');
   await expect(qa.getByTestId('qa-fees')).toHaveValue('1.23');
   await expect(qa).toContainText('swing');
@@ -66,7 +71,7 @@ test('real-trade lifecycle: reopen, offline, export, restore, update', async ({ 
     page = await context.newPage();
     await page.goto(origin);
     await expectTradeExact(page, '$3,734.56');
-    await addEntry(page, { amount: '34.56', loss: true, date: '2026-11-06', symbol: 'OFFLINE' });
+    await addEntry(page, { amount: '34.56', loss: true, date: YESTERDAY, symbol: 'OFFLINE' });
     await gotoTab(page, 'calendar');
     await expect(page.getByTestId('header-balance')).toHaveText('$3,700.00');
 
@@ -76,7 +81,7 @@ test('real-trade lifecycle: reopen, offline, export, restore, update', async ({ 
     const backupPath = (await dl.path())!;
     const file = JSON.parse(readFileSync(backupPath, 'utf8'));
     const t = file.data.trades.find((x: { symbol: string }) => x.symbol === 'NVDA');
-    expect(t).toMatchObject({ date: '2026-11-05', pnlCents: 123456, feesCents: 123, symbol: 'NVDA', tags: ['swing'] });
+    expect(t).toMatchObject({ date: TODAY, pnlCents: 123456, feesCents: 123, symbol: 'NVDA', tags: ['swing'] });
     expect(file.integrity.algorithm).toBe('SHA-256');
 
     // 5. Back online, reopen: offline entry persisted

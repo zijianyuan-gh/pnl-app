@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  AlertTriangle, Archive, ArchiveRestore, Database, Download, FileDown, FileUp, Globe, HardDrive, Plus, ShieldCheck, Smartphone,
+  AlertTriangle, Archive, ArchiveRestore, Database, Download, FileDown, FileUp, Globe, HardDrive, Lock, Plus, ShieldCheck, Smartphone,
   Trash2, Upload, Wallet,
 } from 'lucide-react';
 import { useApp } from '../state/app';
@@ -15,6 +15,8 @@ import { deliverFile, isTouchDevice, makeFile, type SaveOutcome } from '../lib/f
 import { formatMoney } from '../lib/money';
 import { primeKeyboard } from '../lib/keyboard';
 import { isIOS, isStandalone } from '../lib/platform';
+import { DaybookNative, isNative } from '../native/bridge';
+import { biometryLabel, useNativeStatus } from '../native/services';
 import { accountBalance, combinedBalance, type BalanceBreakdown } from '../lib/stats';
 import { AccountForm } from '../components/QuickAdd';
 import { FlowRow } from '../components/rows';
@@ -22,6 +24,8 @@ import { CsvImportSheet, ExportSheet, RestoreSheet, type PendingExport } from '.
 import { AccountDot, Button, EmptyState, Group, InfoTip, Money, Row, Segmented, Sheet } from '../components/ui';
 
 const BACKUP_DUE_DAYS = 14;
+/** Public pages (privacy policy, support) — same in the browser and in the iOS app. */
+const SITE = 'https://zijianyuan-gh.github.io/pnl-app/';
 
 export function AccountsScreen({ createSignal }: { createSignal: number }) {
   const { T, accounts, trades, cashflows, today, toast } = useApp();
@@ -302,7 +306,8 @@ function DataSection() {
 
   /** Desktop: download right away. Phone: prepare first, then share from a tap (iOS needs the gesture). */
   const offer = async (p: PendingExport) => {
-    if (!isTouchDevice()) await finishExport(await deliverFile(p.file, false), p.kind);
+    // iOS app: straight to the native share sheet. Desktop: download. Phone browser: two-step sheet.
+    if (isNative() || !isTouchDevice()) await finishExport(await deliverFile(p.file, false), p.kind);
     else setPending(p);
   };
 
@@ -384,15 +389,18 @@ function DataSection() {
         <Row onClick={() => setCsvOpen(true)} icon={<FileUp size={18} className="text-ink-2" />} label={T.data.importCsv} chevron testId="import-csv" />
         <Row
           icon={<Smartphone size={18} className="text-ink-2" />}
-          label={<span className="whitespace-normal text-[14px]">{isStandalone() ? T.data.modeStandalone : T.data.modeBrowser}</span>}
+          label={<span className="whitespace-normal text-[14px]">{isNative() ? T.native.mode : isStandalone() ? T.data.modeStandalone : T.data.modeBrowser}</span>}
           testId="display-mode"
         />
-        {isIOS() && !isStandalone() && (
+        {!isNative() && isIOS() && !isStandalone() && (
           <div className="flex items-start gap-2 border-t border-line bg-warn/10 px-4 py-2.5 text-[13px] leading-snug text-warn" data-testid="safari-tab-warning">
             <AlertTriangle size={15} className="mt-0.5 shrink-0" aria-hidden />
             {T.data.safariTabWarning}
           </div>
         )}
+        {isNative() ? (
+          <NativeAutoBackupRow />
+        ) : (
         <Row
           icon={<HardDrive size={18} className="text-ink-2" />}
           label={<span className="whitespace-normal text-[14px]">{persisted === true ? T.data.persisted : persisted === false ? T.data.notPersisted : T.data.persistUnknown}</span>}
@@ -409,6 +417,7 @@ function DataSection() {
             ) : undefined
           }
         />
+        )}
       </Group>
       <Group>
         <Row onClick={erase} icon={<Trash2 size={18} className="text-neg" />} label={<span className="text-neg">{T.data.eraseAll}</span>} testId="erase-all" />
@@ -417,6 +426,58 @@ function DataSection() {
       <CsvImportSheet open={csvOpen} onClose={() => setCsvOpen(false)} />
       <ExportSheet pending={pending} onClose={() => setPending(null)} onDone={(o, k) => void finishExport(o, k)} />
     </>
+  );
+}
+
+function NativeAutoBackupRow() {
+  const { T, locale } = useApp();
+  const st = useNativeStatus();
+  return (
+    <Row
+      icon={<HardDrive size={18} className="text-ink-2" />}
+      testId="auto-backup"
+      label={T.native.autoBackup}
+      sub={T.native.autoBackupHelp}
+      value={
+        <span className={st.autoBackupError ? 'text-neg' : 'text-ink-2'}>
+          {st.autoBackupError ? T.native.autoBackupFailed : st.autoBackupAt ? new Date(st.autoBackupAt).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) : T.native.autoBackupNever}
+        </span>
+      }
+    />
+  );
+}
+
+function AppLockRow() {
+  const { T, settings, setSettings, toast } = useApp();
+  const st = useNativeStatus();
+  const on = !!settings.appLock;
+  const method = biometryLabel(T, st.biometry);
+  return (
+    <label className="flex min-h-[52px] cursor-pointer items-start gap-3 border-t border-line px-4 py-3" data-testid="app-lock-row">
+      <Lock size={18} className="mt-0.5 shrink-0 text-ink-2" aria-hidden />
+      <span className="min-w-0 flex-1">
+        <span className="block text-[15px]">{T.lock.setting}</span>
+        <span className="mt-0.5 block text-[13px] leading-snug text-ink-3">{fmt(T.lock.settingHelp, { method })}</span>
+      </span>
+      <input
+        type="checkbox"
+        role="switch"
+        className="mt-1 h-6 w-6 shrink-0 accent-[#3ddc97]"
+        checked={on}
+        aria-label={T.lock.setting}
+        data-testid="app-lock-toggle"
+        onChange={async () => {
+          // Changing the lock always requires the owner to authenticate
+          const r = await DaybookNative.authenticate({ reason: T.lock.reason, cancelTitle: T.common.cancel }).catch(() => ({ success: false, error: 'failed' }));
+          if (!r.success) {
+            if (r.error === 'passcode_not_set') toast({ message: T.lock.noPasscode, tone: 'error' });
+            return;
+          }
+          await setSettings({ appLock: !on });
+          toast({ message: !on ? T.lock.on : T.lock.off, tone: 'success' });
+        }}
+      />
+    </label>
   );
 }
 
@@ -440,6 +501,7 @@ function PrefsSection() {
           ]}
         />
       </div>
+      {isNative() && <AppLockRow />}
     </Group>
   );
 }
@@ -452,8 +514,17 @@ function AboutSection() {
         <p className="font-semibold text-ink">
           {T.appName} · {fmt(T.about.version, { v: __APP_VERSION__ })}
         </p>
+        <p className="mt-1">{T.about.disclaimer}</p>
         <p className="mt-1">{T.about.privacy}</p>
-        <p className="mt-1">{T.about.install}</p>
+        {!isNative() && <p className="mt-1">{T.about.install}</p>}
+        <p className="mt-2 flex gap-4">
+          <a className="font-medium text-link underline-offset-2 hover:underline" href={`${SITE}privacy.html`} target="_blank" rel="noopener noreferrer" data-testid="privacy-link">
+            {T.about.privacyPolicy}
+          </a>
+          <a className="font-medium text-link underline-offset-2 hover:underline" href={`${SITE}support.html`} target="_blank" rel="noopener noreferrer" data-testid="support-link">
+            {T.about.support}
+          </a>
+        </p>
       </div>
     </Group>
   );

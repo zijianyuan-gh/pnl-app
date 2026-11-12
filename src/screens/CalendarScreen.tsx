@@ -9,6 +9,7 @@ import { addMonths, formatDate, formatMonth, monthGrid, monthKeyOf, parseISODate
 import { formatCompact, formatMoney } from '../lib/money';
 import { primeKeyboard } from '../lib/keyboard';
 import { isIOS, isStandalone } from '../lib/platform';
+import { isNative } from '../native/bridge';
 import { aggregateByDay, combinedBalance, summarizeDays, type DayAgg } from '../lib/stats';
 
 export function CalendarScreen({ onCreateAccount }: { onCreateAccount: () => void }) {
@@ -109,7 +110,7 @@ export function CalendarScreen({ onCreateAccount }: { onCreateAccount: () => voi
                 </Button>
               }
             />
-            {isIOS() && !isStandalone() && (
+            {!isNative() && isIOS() && !isStandalone() && (
               <p className="mx-4 mb-4 -mt-4 rounded-xl bg-warn/10 px-3 py-2.5 text-[13px] leading-snug text-warn" data-testid="welcome-safari-warning">
                 {T.data.safariTabWarning}
               </p>
@@ -299,7 +300,7 @@ function DayCell({
       <span
         aria-hidden
         className={cx(
-          'num flex h-[18px] min-w-[18px] items-center justify-center self-start rounded-full px-1 text-[11px] font-semibold leading-none sm:h-5 sm:min-w-5 sm:text-[12px]',
+          'num flex h-[18px] min-w-[18px] items-center justify-center self-start rounded-full px-1 text-[11px] font-semibold leading-none min-[385px]:h-5 min-[385px]:text-[12px] sm:h-5 sm:min-w-5 sm:text-[12px]',
           isToday ? 'bg-ink text-black' : has ? 'text-ink' : 'text-ink-3',
         )}
       >
@@ -309,7 +310,7 @@ function DayCell({
         <span className="mt-auto block w-full min-w-0 text-center" aria-hidden>
           <span
             className={cx(
-              'num block whitespace-nowrap text-[10.5px] font-bold leading-tight tracking-[-0.04em] min-[400px]:text-[11.5px] sm:text-[14px]',
+              'num block whitespace-nowrap text-[10.5px] font-bold leading-tight tracking-[-0.04em] min-[385px]:text-[11.5px] min-[425px]:text-[12.5px] sm:text-[14px]',
               tone === 'pos' ? 'text-pos-hi' : tone === 'neg' ? 'text-neg-hi' : 'text-ink-2',
             )}
           >
@@ -318,7 +319,7 @@ function DayCell({
               {Math.abs(pnl) < 100_000_00 ? formatMoney(pnl, { sign: 'always', cents: Math.abs(pnl) < 1_000_00 }) : formatCompact(pnl)}
             </span>
           </span>
-          <span className="num block truncate text-[9.5px] leading-tight text-[#d4d4d8] min-[400px]:text-[10px] sm:text-[11.5px]" aria-hidden>
+          <span className="num block truncate text-[9.5px] leading-tight text-[#d4d4d8] min-[385px]:text-[10px] min-[425px]:text-[10.5px] sm:text-[11.5px]" aria-hidden>
             <span className="min-[360px]:hidden">{agg!.trades}×</span>
             <span className="hidden min-[360px]:inline">{tradeLabel(agg!.trades)}</span>
           </span>

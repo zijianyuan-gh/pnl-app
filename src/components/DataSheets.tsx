@@ -7,11 +7,35 @@ import { commitImport, undoImport } from '../db/importCsv';
 import { buildImportPreview, guessMapping, IMPORT_FIELDS, parseCSV, type ImportField, type ImportOptions, type Mapping } from '../lib/csv';
 import { formatDate, type DateOrder } from '../lib/dates';
 import { canShareFile, deliverFile, formatBytes, readFileText, type SaveOutcome } from '../lib/files';
+import { DaybookNative, isNative } from '../native/bridge';
 import { formatMoney } from '../lib/money';
 import { Button, FieldLabel, Money, Segmented, Sheet, cx } from './ui';
 
 /** Refuse absurdly large files instead of freezing the phone (≈ 200k trades as JSON). */
 const MAX_IMPORT_BYTES = 50 * 1024 * 1024;
+
+/**
+ * Open a file. In the iOS app this is the native Files picker (reliable on every iOS version);
+ * the picked file goes through exactly the same validation as in the browser.
+ */
+async function chooseFile(
+  kind: 'json' | 'csv',
+  input: React.RefObject<HTMLInputElement | null>,
+  onFile: (f?: File) => void,
+  onError: (code: 'tooLarge' | 'read') => void,
+) {
+  if (!isNative()) {
+    input.current?.click();
+    return;
+  }
+  try {
+    const r = await DaybookNative.pickFile({ kind });
+    if (r.cancelled || r.text === undefined) return;
+    onFile(new File([r.text], r.name ?? (kind === 'json' ? 'backup.json' : 'import.csv'), { type: kind === 'json' ? 'application/json' : 'text/csv' }));
+  } catch (e) {
+    onError(String((e as Error)?.message ?? e).includes('too_large') ? 'tooLarge' : 'read');
+  }
+}
 
 /** Run an Undo; if data changed since, explain that nothing was overwritten. */
 function useSafeUndo() {
@@ -183,7 +207,8 @@ export function RestoreSheet({ open, onClose, onExportFirst }: { open: boolean; 
       />
       <button
         type="button"
-        onClick={() => input.current?.click()}
+        data-testid="restore-choose"
+        onClick={() => chooseFile('json', input, onFile, (c) => setError(T.data.errors[c]))}
         className="flex min-h-24 w-full flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-line-strong bg-surface-2 px-4 py-5 text-[15px] font-medium text-ink-2"
       >
         <FileJson size={26} />
@@ -358,7 +383,8 @@ export function CsvImportSheet({ open, onClose }: { open: boolean; onClose: () =
       <input ref={input} type="file" accept=".csv,.tsv,.txt,text/csv,text/comma-separated-values,text/tab-separated-values,text/plain" className="sr-only" data-testid="csv-file" onChange={(e) => onFile(e.target.files?.[0])} />
       <button
         type="button"
-        onClick={() => input.current?.click()}
+        data-testid="csv-choose"
+        onClick={() => chooseFile('csv', input, onFile, (c) => setError(T.data.errors[c]))}
         className="flex min-h-20 w-full flex-col items-center justify-center gap-1.5 rounded-2xl border border-dashed border-line-strong bg-surface-2 px-4 py-4 text-[15px] font-medium text-ink-2"
       >
         <FileSpreadsheet size={24} />

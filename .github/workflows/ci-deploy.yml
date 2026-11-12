@@ -4,6 +4,9 @@
 #   live   → wait until https://<owner>.github.io/<repo>/ serves THIS commit, then run the
 #            live checks there (Chromium + WebKit), incl. "a redeploy keeps existing data"
 #   mac    → build Daybook.app on macOS, test the real binary there, attach it to a release
+#   ios    → build the native iOS app (Capacitor, web assets bundled), run XCUITests in the
+#            iOS Simulator, export App Store screenshots, make an UNSIGNED device archive
+#            (no signing, no upload — that needs the owner's Apple Developer account)
 # Nothing is published unless `test` passes.
 name: CI & deploy
 
@@ -178,3 +181,87 @@ jobs:
             --notes "Mac: download Daybook-mac.zip, or run in Terminal: curl -fsSL https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/mac/install.sh | bash"
           gh release upload "$v" release/Daybook-mac.zip --clobber
           echo "### Mac app: https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/Daybook-mac.zip" >> "$GITHUB_STEP_SUMMARY"
+
+  ios:
+    needs: test
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      BASE_PATH: /
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Toolchain
+        run: xcodebuild -version && xcrun simctl list runtimes | grep -i ios
+      - name: Build the web app and bundle it into the iOS project
+        run: |
+          npm run build && npm run check:dist
+          npx cap sync ios
+          test -f ios/App/App/public/index.html
+          # the app must load its bundled files, never a remote server
+          ! grep -q '"url"' ios/App/App/capacitor.config.json
+          grep -q 'connect-src' ios/App/App/public/index.html
+      - name: Boot a simulator
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 scripts/ios-pick-simulator.py)
+          echo "UDID=$UDID" >> "$GITHUB_ENV"
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl status_bar "$UDID" override --time 9:41 --dataNetwork wifi --wifiBars 3 --cellularBars 4 --batteryState charged --batteryLevel 100
+      - name: Build app + UI tests (simulator)
+        run: |
+          set -o pipefail
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug \
+            -destination "id=$UDID" -derivedDataPath build/dd CODE_SIGNING_ALLOWED=NO build-for-testing | tail -25
+      - name: Install and seed a PWA backup (synthetic data)
+        run: |
+          node scripts/make-demo-backup.mjs build/demo
+          echo "DEMO_BALANCE=$(node -p "require('./build/demo/expected.json').balance")" >> "$GITHUB_ENV"
+          xcrun simctl install "$UDID" build/dd/Build/Products/Debug-iphonesimulator/App.app
+          DATA=$(xcrun simctl get_app_container "$UDID" io.github.zijianyuangh.daybook data)
+          mkdir -p "$DATA/Documents"
+          cp build/demo/demo-backup.json "$DATA/Documents/Daybook Auto-Backup.json"
+          cp build/demo/demo-backup.json "$DATA/Documents/Daybook PWA backup.json"
+      - name: Enroll Face ID and auto-match prompts in the background
+        run: |
+          xcrun simctl spawn "$UDID" notifyutil -s com.apple.BiometricKit.enrollmentChanged '1'
+          xcrun simctl spawn "$UDID" notifyutil -p com.apple.BiometricKit.enrollmentChanged
+          nohup bash -c "while true; do xcrun simctl spawn $UDID notifyutil -p com.apple.BiometricKit_Sim.pearl.match; sleep 2; done" > /dev/null 2>&1 &
+      - name: Run the UI tests in the Simulator
+        env:
+          TEST_RUNNER_DEMO_BALANCE: ${{ env.DEMO_BALANCE }}
+          TEST_RUNNER_FACEID: '1'
+        run: |
+          set -o pipefail
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -destination "id=$UDID" -derivedDataPath build/dd \
+            -resultBundlePath build/UITests.xcresult CODE_SIGNING_ALLOWED=NO test-without-building 2>&1 \
+            | grep -E "Test (Suite|Case)|error:|failed|passed|skipped|\*\* TEST" | tail -60
+      - name: Export screenshots
+        if: always()
+        run: |
+          mkdir -p build/screenshots
+          xcrun xcresulttool export attachments --path build/UITests.xcresult --output-path build/screenshots || true
+          ls -la build/screenshots | head -40
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-ui-tests
+          path: |
+            build/screenshots
+            build/UITests.xcresult
+          retention-days: 14
+      - name: Release archive for a real iPhone (unsigned — proves the device build compiles)
+        run: |
+          set -o pipefail
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath build/Daybook.xcarchive \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO archive | tail -15
+          APP=build/Daybook.xcarchive/Products/Applications/App.app
+          test -f "$APP/public/index.html"
+          lipo -archs "$APP/App"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' -c 'Print :CFBundleShortVersionString' -c 'Print :CFBundleVersion' "$APP/Info.plist"
+          echo "### iOS: simulator UI tests passed; unsigned Release archive built ($(du -sh "$APP" | cut -f1))" >> "$GITHUB_STEP_SUMMARY"

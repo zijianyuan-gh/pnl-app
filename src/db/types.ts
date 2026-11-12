@@ -72,6 +72,10 @@ export type Lang = 'en' | 'zh';
 export interface Settings {
   lang: Lang | null; // null = follow device
   lastBackupAt: number | null;
+  /** iOS app: require Face ID / Touch ID / passcode to open (a screen lock, not encryption) */
+  appLock?: boolean;
+  /** when the user last used "Erase all data" (older automatic copies are never offered back) */
+  erasedAt?: number | null;
 }
 
 export const ACCOUNT_COLORS = [

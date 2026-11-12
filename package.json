@@ -1,7 +1,7 @@
 {
   "name": "daybook-pnl-journal",
   "private": true,
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Daybook — a local-first personal trading P&L journal (PWA)",
   "type": "module",
   "scripts": {
@@ -20,6 +20,7 @@
     "e2e:live": "playwright test -c playwright.live.config.ts"
   },
   "dependencies": {
+    "@capacitor/core": "^8.5.3",
     "dexie": "^4.4.7",
     "dexie-react-hooks": "^4.4.0",
     "lucide-react": "^1.69.0",
@@ -28,6 +29,8 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",
+    "@capacitor/cli": "^8.5.3",
+    "@capacitor/ios": "^8.5.3",
     "@playwright/test": "1.63.0",
     "@tailwindcss/vite": "^4.3.4",
     "@types/node": "^26.6.6",
