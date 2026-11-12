@@ -133,7 +133,16 @@ curl -fsSL https://raw.githubusercontent.com/zijianyuan-gh/pnl-app/main/mac/inst
 | 导出完整备份打开系统分享面板，含「存储到“文件”」 | ✅ test4 |
 | 「从备份恢复」通过系统「文件」选择器选取文件 → SHA-256 校验 → 合并不产生重复 | ✅ test5（文件中 2 个备份可见；合并结果 0 新增 · 0 更新 · 0 删除） |
 | 面容 ID 应用锁：开启需认证；切到后台再回来、重新启动后都被锁定；无匹配时保持锁定；匹配后解锁；关闭也需认证 | ✅ test6（连续 3 次后台/返回循环；CI 用模拟面容 ID，仅在测试请求时匹配） |
+| 导出 →「存储到“文件”」→ 文件出现在「我的 iPhone/Daybook」并能恢复（往返）；关闭分享面板不记为已备份 | ✅ test7、test4 |
+| 被改动的备份被拒绝，数据不变（重启后也不变） | ✅ test8 |
+| 通过「文件」选择器导入 CSV | ✅ test9 |
+| 隐私政策链接在 Safari 中打开，App 不浏览网页 | ✅ testA |
+| 在原有安装上再次安装（等同更新）后全部记录仍在 | ✅ testZ |
+| iPhone App 在 iPad 模拟器上（兼容模式）启动并保持运行 | ✅ |
 | Release 真机架构归档（`generic/platform=iOS`，arm64，未签名） | ✅ `ARCHIVE SUCCEEDED`，arm64，`io.github.zijianyuangh.daybook` 1.2.0 (1) |
+| Release 包内：隐私清单 `PrivacyInfo.xcprivacy`、图标；无测试预置代码、无网页调试器；Daybook 自身 Swift 代码 0 个编译警告 | ✅ |
+
+完整的验收报告与测试截图：[`docs/V1.2-验收报告.md`](docs/V1.2-验收报告.md)。
 
 **仅完成代码与配置（需要你的 Apple 开发者账号才能验证）**：代码签名、证书与描述文件、App Store Connect 记录、上传、TestFlight、App 审核。我没有申请任何证书，也没有上传或提交。
 
@@ -217,9 +226,9 @@ React 19 + TypeScript + Vite 8 + Tailwind CSS 4；IndexedDB（Dexie 4）；vite-
 npm run typecheck && npm test && npm run e2e
 ```
 
-- 单元测试 95 项：金额（含小数逗号与非法分组）、日期、统计、CSV、账务场景 A/B/C、SHA-256（对照 Node crypto）、逐字段篡改检测、v1.0 兼容、事务回滚、合并规则 R1–R6、双设备收敛、精度与余额边界、撤销冲突（恢复后新增/修改/删除交易、资金、账户及 CSV 导入后修改时，撤销被拒绝且数据不变）。
+- 单元测试 99 项：金额（含小数逗号与非法分组）、日期、统计、CSV、账务场景 A/B/C、SHA-256（对照 Node crypto）、逐字段篡改检测、v1.0 兼容、事务回滚、合并规则 R1–R6、双设备收敛、精度与余额边界、撤销冲突（恢复后新增/修改/删除交易、资金、账户及 CSV 导入后修改时，撤销被拒绝且数据不变）。
 - E2E（Chromium，iPhone 14 模拟 + 桌面）：账务、编辑删除撤销、备份恢复（含 v1.0 文件与撤销）、CSV 导入、时区、布局、PWA 离线与更新、**真实交易全生命周期验收**、iPhone 专项（分享面板手势、无分享面板时下载、键盘遮挡、安全区、草稿、小数逗号、主屏幕模式、axe 无障碍）、安全（同源、CSP、XSS）。
-- iOS 原生（XCUITest，在 GitHub Actions 的 macOS + iOS 模拟器中运行真实 App，`ios/App/AppUITests/AppUITests.swift`）：PWA 格式备份在全新安装的 App 中恢复并在重启后保留、App Store 截图（英文 + 中文）、Quick Add 打开即聚焦金额并位于屏幕键盘之上、记录交易后重启仍在、导出打开系统分享面板（含「存储到“文件”」）、「文件」选择器恢复、面容 ID 应用锁（无匹配时保持锁定）；另有 Release 版真机架构归档（未签名）。单元测试 `tests/unit/ios-config.test.ts` 检查权限只有面容 ID、不加载远程 URL、Bundle ID 与版本号一致、图标规格、插件注册。
+- iOS 原生（XCUITest，在 GitHub Actions 的 macOS + iOS 模拟器中运行真实 App，`ios/App/AppUITests/AppUITests.swift`，共 11 项）：网页版格式备份在全新安装中恢复、中英文 App Store 截图、Quick Add 在屏幕键盘之上、记录后重启仍在、分享面板、「文件」选择器恢复与合并不重复、面容 ID 应用锁（连续 3 次后台循环）、「存储到“文件”」往返、被改动的备份被拒绝、CSV 导入、外部链接在 Safari 打开、再次安装（更新）后数据仍在；另有 iPad 兼容模式启动、Release 真机架构归档与包内检查。单元测试 `tests/unit/ios-config.test.ts` 检查权限只有面容 ID、不加载远程 URL、网页存储来源不变、隐私清单、Bundle ID 与版本号一致、图标规格、插件注册与原生上锁触发。
 
 ## 已知限制
 
