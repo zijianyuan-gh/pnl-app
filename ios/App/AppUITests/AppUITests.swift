@@ -101,7 +101,7 @@ final class AppUITests: XCTestCase {
         while Date() < end && !calendar.exists && !locked.exists && !chinese.exists { Thread.sleep(forTimeInterval: 0.5) }
         // Only when an earlier test failed half-way (that failure is reported there), so this one
         // starts from the usual state instead of failing too: App Lock left on, or the UI left in 中文.
-        if locked.exists && env["FACEID"] == "1" { _ = matchFaceID { !locked.exists } }
+        if locked.exists && env["FACEID"] == "1" { _ = authenticate(retry: tapUnlockButton, until: { !locked.exists }) }
         if chinese.exists && !calendar.exists {
             tab("账户")
             let en = control("EN")
@@ -289,6 +289,23 @@ final class AppUITests: XCTestCase {
         web.buttons["Merge into current data"].firstMatch.tap()
     }
 
+    /// Face ID until `done()`. If no match gets through for 20 s, the system sheet never came up
+    /// (on a busy CI machine LocalAuthentication can fail with "UI activation timed out"; the app
+    /// then shows the failure and stays locked/unchanged, as it should), so ask again the way a
+    /// person would: `retry` taps the switch or "Unlock with Face ID". At most 3 attempts.
+    private func authenticate(retry: () -> Void, until done: () -> Bool) -> Bool {
+        for attempt in 0..<3 {
+            if attempt > 0 { retry() }
+            if matchFaceID(timeout: 20, until: done) { return true }
+        }
+        return done()
+    }
+
+    private func tapUnlockButton() {
+        let unlock = web.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Unlock with")).firstMatch
+        if unlock.exists && unlock.isHittable { unlock.tap() }
+    }
+
     private func dismissSystemAlertIfPresent() {
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         for label in ["OK", "Allow"] where springboard.buttons[label].waitForExistence(timeout: 2) {
@@ -417,7 +434,7 @@ final class AppUITests: XCTestCase {
         dismissSystemAlertIfPresent() // "Allow Daybook to use Face ID?"
         Thread.sleep(forTimeInterval: 2)
         XCTAssertFalse(isOn(), "App Lock turned on without authentication")
-        XCTAssertTrue(matchFaceID(until: isOn), "App Lock did not turn on after Face ID")
+        XCTAssertTrue(authenticate(retry: { toggle.tap() }, until: isOn), "App Lock did not turn on after Face ID")
 
         // Leave and come back (3 times, right after the previous unlock — the timing that once
         // slipped through): locked every time, and it stays locked until Face ID matches
@@ -430,7 +447,7 @@ final class AppUITests: XCTestCase {
             Thread.sleep(forTimeInterval: 3)
             XCTAssertTrue(locked.exists, "unlocked without Face ID (round \(round))")
             if round == 1 { shot("lock-1-locked") }
-            XCTAssertTrue(matchFaceID { !locked.exists }, "Face ID did not unlock (round \(round))")
+            XCTAssertTrue(authenticate(retry: tapUnlockButton, until: { !locked.exists }), "Face ID did not unlock (round \(round))")
         }
         wait(button("Calendar"))
 
@@ -440,7 +457,7 @@ final class AppUITests: XCTestCase {
         XCTAssertTrue(locked.waitForExistence(timeout: 15), "not locked after relaunch")
         Thread.sleep(forTimeInterval: 3)
         XCTAssertTrue(locked.exists, "unlocked without Face ID after relaunch")
-        XCTAssertTrue(matchFaceID { !locked.exists }, "Face ID did not unlock after relaunch")
+        XCTAssertTrue(authenticate(retry: tapUnlockButton, until: { !locked.exists }), "Face ID did not unlock after relaunch")
 
         // Turn it off again (also needs Face ID). The first tap can land while the system Face ID
         // sheet is still going away, so make sure the Accounts screen is really open.
@@ -450,7 +467,7 @@ final class AppUITests: XCTestCase {
         wait(button("New account"))
         reveal(toggle)
         toggle.tap()
-        XCTAssertTrue(matchFaceID { !isOn() }, "App Lock did not turn off")
+        XCTAssertTrue(authenticate(retry: { toggle.tap() }, until: { !isOn() }), "App Lock did not turn off")
     }
 
     // MARK: - 7. Export → "Save to Files" → the file is in Files and restores (round trip)
