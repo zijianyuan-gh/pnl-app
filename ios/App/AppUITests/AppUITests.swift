@@ -49,17 +49,27 @@ final class AppUITests: XCTestCase {
     private func screenshotSet(_ p: String, add: String, amount: String, loss: String, cancel: String, discard: String, tabs: [String]) {
         tab(tabs[0]); shot("\(p)-1-calendar")
         button(add).tap()
+        let sheet = wait(entrySheet)
         let field = wait(web.textFields[amount].firstMatch)
         field.typeText("128.40")
         if p == "en" { checkQuickAddAboveKeyboard(field) }
-        control(loss).tap()
-        Thread.sleep(forTimeInterval: 0.8)
+        // the Loss option inside this sheet (not a same-named control elsewhere on the page)
+        let lossOption = sheet.descendants(matching: .any).matching(NSPredicate(format: "label == %@ AND elementType != %@", loss, NSNumber(value: XCUIElement.ElementType.staticText.rawValue))).firstMatch
+        wait(lossOption).tap()
+        let selectedEnd = Date().addingTimeInterval(5)
+        while !isSelected(lossOption) && Date() < selectedEnd { Thread.sleep(forTimeInterval: 0.2) }
+        XCTAssertTrue(isSelected(lossOption), "\(loss) was not selected")
+        Thread.sleep(forTimeInterval: 0.5)
         shot("\(p)-2-quick-add")
         button(cancel).tap()
+        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: sheet)
+        waitForExpectations(timeout: 10)
         // the half-typed entry is kept as a draft; discard it so later steps start clean
         button(add).tap()
         if button(discard).waitForExistence(timeout: 3) { button(discard).tap() }
         button(cancel).tap()
+        expectation(for: NSPredicate(format: "exists == false"), evaluatedWith: entrySheet)
+        waitForExpectations(timeout: 10)
         tab(tabs[1]); shot("\(p)-3-trades")
         tab(tabs[2]); shot("\(p)-4-analytics")
         tab(tabs[3])
@@ -86,12 +96,28 @@ final class AppUITests: XCTestCase {
 
     private func launchAndWait() {
         app.launch()
-        let calendar = button("Calendar"), locked = textContaining("Daybook is locked")
+        let calendar = button("Calendar"), locked = textContaining("Daybook is locked"), chinese = button("日历")
         let end = Date().addingTimeInterval(30)
-        while Date() < end && !calendar.exists && !locked.exists { Thread.sleep(forTimeInterval: 0.5) }
-        // only if an earlier test failed with App Lock still on (that failure is reported there)
+        while Date() < end && !calendar.exists && !locked.exists && !chinese.exists { Thread.sleep(forTimeInterval: 0.5) }
+        // Only when an earlier test failed half-way (that failure is reported there), so this one
+        // starts from the usual state instead of failing too: App Lock left on, or the UI left in 中文.
         if locked.exists && env["FACEID"] == "1" { _ = matchFaceID { !locked.exists } }
+        if chinese.exists && !calendar.exists {
+            tab("账户")
+            let en = control("EN")
+            reveal(en)
+            en.tap()
+        }
         wait(calendar, 30)
+    }
+
+    /// The open Quick Add sheet ("New entry" / "新记录").
+    private var entrySheet: XCUIElement {
+        web.descendants(matching: .any).matching(NSPredicate(format: "label ENDSWITH %@", "web dialog")).firstMatch
+    }
+
+    private func isSelected(_ e: XCUIElement) -> Bool {
+        (e.value as? String) == "1" || (e.value as? NSNumber)?.intValue == 1
     }
 
     /// Back from the Home Screen. On a slow CI machine the first activation can be lost.
@@ -282,6 +308,7 @@ final class AppUITests: XCTestCase {
         reveal(zh)
         zh.tap()
         wait(button("日历"))
+        Thread.sleep(forTimeInterval: 2) // the whole page re-renders in the new language
         screenshotSet("zh", add: "记录", amount: "已实现净盈亏", loss: "亏损", cancel: "取消", discard: "丢弃",
                       tabs: ["日历", "交易", "统计", "账户"])
         let en = control("EN")
