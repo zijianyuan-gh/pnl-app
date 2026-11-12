@@ -223,15 +223,27 @@ jobs:
         run: |
           node scripts/make-demo-backup.mjs build/demo
           echo "DEMO_BALANCE=$(node -p "require('./build/demo/expected.json').balance")" >> "$GITHUB_ENV"
-      - name: Enroll Face ID and auto-match prompts in the background
+      - name: Enroll Face ID; match a face only when a UI test asks
         run: |
           xcrun simctl spawn "$UDID" notifyutil -s com.apple.BiometricKit.enrollmentChanged '1'
           xcrun simctl spawn "$UDID" notifyutil -p com.apple.BiometricKit.enrollmentChanged
-          nohup bash -c "while true; do xcrun simctl spawn $UDID notifyutil -p com.apple.BiometricKit_Sim.pearl.match; sleep 2; done" > /dev/null 2>&1 &
+          # AppUITests.requestFaceIDMatch() drops a file here; each file = one "matching face"
+          mkdir -p build/faceid build/ci-output
+          echo "FACEID_DIR=$PWD/build/faceid" >> "$GITHUB_ENV"
+          nohup bash -c 'while true; do
+              for f in "$0"/match-*; do
+                [ -e "$f" ] || continue
+                rm -f "$f"
+                xcrun simctl spawn "$1" notifyutil -p com.apple.BiometricKit_Sim.pearl.match
+                echo "$(date +%T) face matched"
+              done
+              sleep 0.3
+            done' "$PWD/build/faceid" "$UDID" > build/ci-output/faceid.log 2>&1 &
       - name: Run the UI tests in the Simulator
         env:
           TEST_RUNNER_DEMO_BALANCE: ${{ env.DEMO_BALANCE }}
           TEST_RUNNER_FACEID: '1'
+          TEST_RUNNER_FACEID_DIR: ${{ env.FACEID_DIR }}
         run: |
           set -o pipefail
           # the Debug app copies this backup into its Documents folder (see DaybookViewController.seedForUITests)

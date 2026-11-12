@@ -86,6 +86,35 @@ final class AppUITests: XCTestCase {
         add(a)
     }
 
+    /// A row in a list (WebKit merges a row's texts into one button label).
+    private func row(containing parts: String...) -> XCUIElement {
+        let preds = parts.map { NSPredicate(format: "label CONTAINS %@", $0) }
+        return web.buttons.matching(NSCompoundPredicate(andPredicateWithSubpredicates: preds)).firstMatch
+    }
+
+    /// Simulated Face ID: CI turns each request file into exactly one "matching face" event, so a
+    /// prompt is only ever satisfied when the test asks (see the workflow, job "ios").
+    private func requestFaceIDMatch(file: StaticString = #filePath, line: UInt = #line) {
+        guard let dir = env["FACEID_DIR"] else { return XCTFail("FACEID_DIR not set", file: file, line: line) }
+        let path = (dir as NSString).appendingPathComponent("match-\(UUID().uuidString)")
+        XCTAssertTrue(FileManager.default.createFile(atPath: path, contents: Data()), "cannot write \(path)", file: file, line: line)
+    }
+
+    /// Ask for a Face ID match every 2 s (the prompt may still be animating in) until `done()`.
+    private func matchFaceID(timeout: TimeInterval = 40, until done: () -> Bool) -> Bool {
+        let end = Date().addingTimeInterval(timeout)
+        var next = Date()
+        while Date() < end {
+            if done() { return true }
+            if Date() >= next {
+                requestFaceIDMatch()
+                next = Date().addingTimeInterval(2)
+            }
+            Thread.sleep(forTimeInterval: 0.25)
+        }
+        return done()
+    }
+
     private func dismissSystemAlertIfPresent() {
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         for label in ["OK", "Allow"] where springboard.buttons[label].waitForExistence(timeout: 2) {
@@ -167,11 +196,12 @@ final class AppUITests: XCTestCase {
         wait(textContaining("+$1,234.56"))
         button("Save").tap()
         wait(textContaining("Saved +$1,234.56"), 10)
-        wait(text("+$1,234.56"))
+        // the selected day (today) lists the new trade
+        wait(row(containing: "Trade", "+$1,234.56"))
 
         app.terminate()
         launchAndWait()
-        wait(text("+$1,234.56"))
+        wait(row(containing: "Trade", "+$1,234.56"))
     }
 
     // MARK: - 4. Export opens the system share sheet with "Save to Files"
@@ -217,7 +247,13 @@ final class AppUITests: XCTestCase {
         let folder = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", "Daybook")).firstMatch
         if folder.waitForExistence(timeout: 5) { folder.tap() }
         let file = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "PWA backup")).firstMatch
-        guard file.waitForExistence(timeout: 10) else {
+        let found = file.waitForExistence(timeout: 15)
+        shot("picker-3-folder")
+        let folderTree = XCTAttachment(string: String(app.debugDescription.prefix(150_000)))
+        folderTree.name = "picker-tree-folder"
+        folderTree.lifetime = .keepAlways
+        add(folderTree)
+        guard found else {
             throw XCTSkip("Could not navigate the system Files picker in this simulator; the picker opened but the file could not be selected by automation.")
         }
         file.tap()
@@ -229,42 +265,50 @@ final class AppUITests: XCTestCase {
         wait(textContaining("Merged: 0 added · 0 updated · 0 deleted"), 10)
     }
 
-    // MARK: - 6. App Lock with Face ID (CI enrolls Face ID and keeps "matching" in the background)
+    // MARK: - 6. App Lock with Face ID (CI enrolls Face ID; a face "matches" only when the test asks)
 
     func test6_appLockWithFaceID() throws {
         guard env["FACEID"] == "1" else { throw XCTSkip("Face ID simulation not enabled") }
         launchAndWait()
         tab("Accounts")
-        // WebKit exposes <input role="switch"> as a switch (or a checkbox on older iOS)
+        // WebKit exposes <input role="switch"> as a switch; value "1" = on
         let toggle = web.switches["App Lock"].firstMatch
         reveal(toggle)
         XCTAssertTrue(toggle.waitForExistence(timeout: 10), "App Lock switch not found (is biometry/passcode available?)")
+        func isOn() -> Bool { (toggle.value as? String) == "1" }
+        XCTAssertFalse(isOn())
+
+        // Turning it on asks for Face ID first; without a match it stays off
         toggle.tap()
         dismissSystemAlertIfPresent() // "Allow Daybook to use Face ID?"
-        wait(textContaining("App Lock is on"), 20)
+        Thread.sleep(forTimeInterval: 2)
+        XCTAssertFalse(isOn(), "App Lock turned on without authentication")
+        XCTAssertTrue(matchFaceID(until: isOn), "App Lock did not turn on after Face ID")
 
-        // Leave and come back: locked, then Face ID unlocks
+        // Leave and come back: locked, and it stays locked until Face ID matches
         XCUIDevice.shared.press(.home)
         Thread.sleep(forTimeInterval: 1.5)
         app.activate()
         let locked = textContaining("Daybook is locked")
-        XCTAssertTrue(locked.waitForExistence(timeout: 5), "lock screen did not appear")
-        let gone = NSPredicate(format: "exists == false")
-        expectation(for: gone, evaluatedWith: locked)
-        waitForExpectations(timeout: 25)
+        XCTAssertTrue(locked.waitForExistence(timeout: 10), "lock screen did not appear")
+        Thread.sleep(forTimeInterval: 3)
+        XCTAssertTrue(locked.exists, "unlocked without Face ID")
+        shot("lock-1-locked")
+        XCTAssertTrue(matchFaceID { !locked.exists }, "Face ID did not unlock")
         wait(button("Calendar"))
 
-        // Relaunch: still locked until authenticated
+        // Relaunch: locked again until authenticated
         app.terminate()
         app.launch()
-        XCTAssertTrue(textContaining("Daybook is locked").waitForExistence(timeout: 15))
-        expectation(for: gone, evaluatedWith: textContaining("Daybook is locked"))
-        waitForExpectations(timeout: 25)
+        XCTAssertTrue(locked.waitForExistence(timeout: 15), "not locked after relaunch")
+        Thread.sleep(forTimeInterval: 3)
+        XCTAssertTrue(locked.exists, "unlocked without Face ID after relaunch")
+        XCTAssertTrue(matchFaceID { !locked.exists }, "Face ID did not unlock after relaunch")
 
-        // Turn it off again
+        // Turn it off again (also needs Face ID)
         tab("Accounts")
         reveal(toggle)
         toggle.tap()
-        wait(textContaining("App Lock is off"), 20)
+        XCTAssertTrue(matchFaceID { !isOn() }, "App Lock did not turn off")
     }
 }
