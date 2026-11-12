@@ -28,13 +28,17 @@ wanted = {
     "restore-2-tampered-refused": "07-tampered-backup-refused",
     "csv-1-preview": "08-csv-import-preview",
     "lock-1-locked": "09-app-lock-face-id",
+    "update-1-data-kept": "11-update-keeps-data",
 }
 found = {}
-for test in json.loads((src / "screenshots" / "manifest.json").read_text()):
-    for a in test.get("attachments", []):
-        name = re.sub(r"_\d+_[0-9A-F-]{36}\.\w+$", "", a["suggestedHumanReadableName"])
-        if name in wanted:
-            found[wanted[name]] = src / "screenshots" / a["exportedFileName"]
+for folder in [src / "screenshots", src / "screenshots" / "update"]:
+    if not (folder / "manifest.json").exists():
+        continue
+    for test in json.loads((folder / "manifest.json").read_text()):
+        for a in test.get("attachments", []):
+            name = re.sub(r"_\d+_[0-9A-F-]{36}\.\w+$", "", a["suggestedHumanReadableName"])
+            if name in wanted:
+                found[wanted[name]] = folder / a["exportedFileName"]
 ipad = src / "ipad-compat.png"
 if ipad.exists():
     found["10-ipad-compatibility"] = ipad

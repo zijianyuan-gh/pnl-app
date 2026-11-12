@@ -224,6 +224,10 @@ jobs:
           xcrun simctl bootstatus "$UDID" -b
           open -a Simulator --args -CurrentDeviceUDID "$UDID" || true
           sleep 5
+          # Safari's first launch does one-time setup that can stall the simulator; do it now, not mid-test
+          xcrun simctl launch "$UDID" com.apple.mobilesafari || true
+          sleep 15
+          xcrun simctl terminate "$UDID" com.apple.mobilesafari || true
           xcrun simctl status_bar "$UDID" override --time 9:41 --dataNetwork wifi --wifiBars 3 --cellularBars 4 --batteryState charged --batteryLevel 100
       - name: Build app + UI tests (simulator)
         run: |

@@ -357,9 +357,9 @@ final class AppUITests: XCTestCase {
         wait(row(containing: "Trade", "+$1,234.56"))
     }
 
-    // MARK: - 4. Export opens the system share sheet; cancelling records no backup; links open Safari
+    // MARK: - 4. Export opens the system share sheet; cancelling records no backup
 
-    func test4_exportShareSheetAndExternalLinks() throws {
+    func test4_exportOpensShareSheet() throws {
         launchAndWait()
         tab("Accounts")
         let export = button("Export full backup (JSON)")
@@ -372,18 +372,6 @@ final class AppUITests: XCTestCase {
         if app.buttons["Close"].exists { app.buttons["Close"].tap() } else { app.swipeDown(velocity: .fast) }
         wait(button("Calendar"))
         XCTAssertTrue(text("Never").exists, "a cancelled export was recorded as a backup")
-
-        // About → Privacy Policy opens in Safari: the app itself never browses the web
-        let privacy = control("Privacy Policy")
-        reveal(privacy)
-        privacy.tap()
-        let safari = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")
-        XCTAssertTrue(safari.wait(for: .runningForeground, timeout: 20), "Privacy Policy did not open in Safari")
-        Thread.sleep(forTimeInterval: 3) // let the app switch finish before the screenshot
-        shot("link-1-safari")
-        bringAppBack()
-        wait(button("Accounts"))
-        XCTAssertTrue(control("Privacy Policy").exists, "the app navigated away from its own screen")
     }
 
     // MARK: - 5. Restore picks a backup from Files (no duplicates on merge)
@@ -529,6 +517,23 @@ final class AppUITests: XCTestCase {
         tab("Calendar")
         wait(self.row(containing: "CSVTEST", "+$77.77"))
         wait(self.row(containing: "CSVTEST", "−$11.11"))
+    }
+
+    // MARK: - A. About → Privacy Policy opens in Safari: the app itself never browses the web
+
+    func testA_privacyLinkOpensInSafari() throws {
+        launchAndWait()
+        tab("Accounts")
+        let privacy = control("Privacy Policy")
+        reveal(privacy)
+        privacy.tap()
+        let safari = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")
+        XCTAssertTrue(safari.wait(for: .runningForeground, timeout: 45), "Privacy Policy did not open in Safari")
+        Thread.sleep(forTimeInterval: 3) // let the app switch finish before the screenshot
+        shot("link-1-safari")
+        bringAppBack()
+        wait(button("Accounts"))
+        XCTAssertTrue(control("Privacy Policy").exists, "the app navigated away from its own screen")
     }
 
     // MARK: - Z. After the app is installed again over itself (= an update), everything is still there
