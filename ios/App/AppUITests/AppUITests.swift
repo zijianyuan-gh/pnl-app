@@ -260,9 +260,11 @@ final class AppUITests: XCTestCase {
     }
 
     /// The Files picker is open: choose the file whose name contains `name` until `opened` appears.
-    /// The picker is a separate system process; on a busy CI machine a freshly shown picker can
-    /// ignore every tap. Then do what a person would: Cancel, open it again (`reopen`), try again.
-    private func pickFile(_ name: String, reopen: () -> Void, until opened: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
+    /// The picker is a separate system process; on a busy CI machine it sometimes ignores the choice
+    /// of a file. Then do what a person would: (1) tap the file; (2) Cancel, open the picker again
+    /// and find the file with the picker's Search; (3) quit Daybook, start it again, try again.
+    /// `reopen(true)` = after a restart of the app, `reopen(false)` = the app is still on the sheet.
+    private func pickFile(_ name: String, reopen: (_ afterRelaunch: Bool) -> Void, until opened: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
         for round in 0..<3 where !opened.exists {
             if round > 0 {
                 attachTree("picker-tree-round\(round)-\(name)")
@@ -270,10 +272,22 @@ final class AppUITests: XCTestCase {
                 let cancel = bar.exists ? bar.buttons["Cancel"].firstMatch : app.buttons["Cancel"].firstMatch
                 if cancel.exists { cancel.tap() }
                 Thread.sleep(forTimeInterval: 2)
-                reopen()
+                if round == 2 {
+                    app.terminate()
+                    launchAndWait()
+                }
+                reopen(round == 2)
             }
             Thread.sleep(forTimeInterval: 2)
             goToDaybookFolder()
+            if round == 1 {
+                let search = app.searchFields.firstMatch
+                if search.waitForExistence(timeout: 5) {
+                    search.tap()
+                    search.typeText(name)
+                    Thread.sleep(forTimeInterval: 2)
+                }
+            }
             let cell = app.cells.matching(NSPredicate(format: "label CONTAINS %@", name)).firstMatch
             let found = cell.waitForExistence(timeout: 15)
             if round == 0 { shot("picker-\(name)") }
@@ -296,6 +310,18 @@ final class AppUITests: XCTestCase {
     /// The restore sheet's own file button (the screen behind the sheet is hidden from VoiceOver).
     private func tapRestoreFileButton() {
         wait(web.buttons.matching(NSPredicate(format: "label == %@", "Restore from backup")).firstMatch).tap()
+    }
+
+    private func reopenRestorePicker(afterRelaunch: Bool) {
+        if afterRelaunch { openRestorePicker() } else { tapRestoreFileButton() }
+    }
+
+    private func openCSVPicker() {
+        tab("Accounts")
+        let row = button("Import CSV")
+        reveal(row)
+        row.tap()
+        wait(button("Choose a CSV file")).tap()
     }
 
     private func openRestorePicker() {
@@ -432,7 +458,7 @@ final class AppUITests: XCTestCase {
         tab("Accounts")
         let before = dataSummary()
         openRestorePicker()
-        pickFile("PWA backup", reopen: tapRestoreFileButton, until: textContaining("Checksum verified (SHA-256)"))
+        pickFile("PWA backup", reopen: reopenRestorePicker, until: textContaining("Checksum verified (SHA-256)"))
         shot("restore-1-verified")
         mergeRestore()
         // everything in the file is already here → nothing added, nothing duplicated
@@ -522,7 +548,7 @@ final class AppUITests: XCTestCase {
 
         // the saved file is in Files → On My iPhone → Daybook and passes the checksum
         openRestorePicker()
-        pickFile("daybook-backup-", reopen: tapRestoreFileButton, until: textContaining("Checksum verified (SHA-256)"))
+        pickFile("daybook-backup-", reopen: reopenRestorePicker, until: textContaining("Checksum verified (SHA-256)"))
         mergeRestore()
         wait(textContaining("Merged: 0 added · 0 updated · 0 deleted"), 10)
         XCTAssertEqual(dataSummary(), before)
@@ -535,7 +561,7 @@ final class AppUITests: XCTestCase {
         tab("Accounts")
         let before = dataSummary()
         openRestorePicker()
-        pickFile("tampered", reopen: tapRestoreFileButton, until: textContaining("Nothing was restored"))
+        pickFile("tampered", reopen: reopenRestorePicker, until: textContaining("Nothing was restored"))
         shot("restore-2-tampered-refused")
         XCTAssertFalse(web.buttons["Merge into current data"].exists, "a refused file can still be restored")
         XCTAssertFalse(web.buttons["Replace all current data"].exists, "a refused file can still be restored")
@@ -554,12 +580,11 @@ final class AppUITests: XCTestCase {
         launchAndWait()
         tab("Accounts")
         let before = dataSummary()
-        let row = button("Import CSV")
-        reveal(row)
-        row.tap()
-        wait(button("Choose a CSV file")).tap()
+        openCSVPicker()
         let run = web.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Import (")).firstMatch
-        pickFile("Daybook import", reopen: { self.wait(self.button("Choose a CSV file")).tap() }, until: run)
+        pickFile("Daybook import", reopen: { afterRelaunch in
+            if afterRelaunch { self.openCSVPicker() } else { self.wait(self.button("Choose a CSV file")).tap() }
+        }, until: run)
         shot("csv-1-preview")
         XCTAssertEqual(run.label, "Import (2)")
         run.tap()

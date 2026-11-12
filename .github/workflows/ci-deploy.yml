@@ -307,6 +307,10 @@ jobs:
           echo "--- app Documents after the tests:"; ls -la "$DATA/Documents" || true
           # app + web console log (Capacitor forwards console output in Debug builds)
           xcrun simctl spawn "$UDID" log show --last 30m --style compact --predicate 'process == "App"' > build/ci-output/app.log 2>&1 || true
+          # the Files picker runs outside the app: keep its and the file provider's errors for diagnosis
+          xcrun simctl spawn "$UDID" log show --last 60m --style compact \
+            --predicate '(process CONTAINS[c] "fileprovider" OR process CONTAINS[c] "DocumentManager" OR subsystem CONTAINS[c] "FileProvider" OR subsystem CONTAINS[c] "DocumentManager") AND (messageType == error OR messageType == fault OR eventMessage CONTAINS[c] "fail")' \
+            2>&1 | tail -3000 > build/ci-output/files-service.log || true
           grep -E "Daybook" build/ci-output/app.log | grep -v XC_kAX | tail -20 || true
       - name: The iPhone app also runs on iPad (compatibility mode, Guideline 2.4.1)
         timeout-minutes: 12
