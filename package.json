@@ -17,7 +17,10 @@
     "check:dist": "node scripts/check-dist.mjs",
     "build:mac": "node scripts/build-mac.mjs",
     "e2e:mac": "playwright test -c playwright.mac.config.ts",
-    "e2e:live": "playwright test -c playwright.live.config.ts"
+    "e2e:live": "playwright test -c playwright.live.config.ts",
+    "ios:sync": "npm run build && npx cap sync ios",
+    "ios:open": "npx cap open ios",
+    "ios:version": "node scripts/ios-version.mjs"
   },
   "dependencies": {
     "@capacitor/core": "^8.5.3",

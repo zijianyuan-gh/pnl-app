@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="referrer" content="no-referrer" />
+<title>Daybook — Support</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #0a0a0b; color: #e4e4e7; font: 16px/1.6 -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 32px 20px 64px; }
+  h1 { font-size: 28px; margin: 0 0 4px; color: #fff; }
+  h2 { font-size: 19px; margin: 32px 0 8px; color: #fff; }
+  p, li { color: #c4c4cc; }
+  a { color: #6ea8ff; }
+  .muted { color: #8a8a93; font-size: 14px; }
+  hr { border: 0; border-top: 1px solid rgba(255,255,255,.12); margin: 40px 0; }
+</style>
+</head>
+<body>
+<main>
+<h1>Daybook — Support</h1>
+<p class="muted">Daybook: P&amp;L Trading Journal · a personal record-keeping and analysis tool</p>
+<p>Daybook is a calendar journal for your own trading results: record each day's realized profit or loss, see green and red days at a glance, and review your performance by account. It does not connect to brokers, execute trades, hold money or give investment advice.</p>
+
+<h2>Contact</h2>
+<p>Questions, problems or feature requests: <a href="https://github.com/zijianyuan-gh/pnl-app/issues">open an issue on GitHub</a>. Please don't attach backup files — they contain your trading history.</p>
+
+<h2>Backups</h2>
+<ul>
+  <li><strong>Export:</strong> Accounts → Export full backup (JSON) → Save to Files (for example iCloud Drive).</li>
+  <li><strong>Restore:</strong> Accounts → Restore from backup → choose the file. The file's SHA-256 checksum is verified before anything is restored. "Merge" never creates duplicates; "Replace" asks for confirmation and can be undone right away.</li>
+  <li><strong>iOS app automatic copy:</strong> after every change the app saves a full backup in Files → On My iPhone → Daybook. If the app's storage is ever found empty, Daybook offers to restore it.</li>
+  <li>Your data does not sync between devices. Use a backup file to move it.</li>
+</ul>
+
+<h2>Moving from the web app to the iOS app</h2>
+<ol>
+  <li>In the web app (Safari or the Home Screen icon): Accounts → Export full backup (JSON) → Save to Files.</li>
+  <li>Install Daybook from the App Store and open it.</li>
+  <li>Accounts → Restore from backup → pick the file → Replace (or Merge).</li>
+  <li>Check your balance and a few trades. Your web-app data is not deleted; you can remove it later in the web app with Accounts → Erase all data.</li>
+</ol>
+
+<h2>App Lock (Face ID / Touch ID)</h2>
+<p>Accounts → Preferences → App Lock. Daybook then asks for Face ID, Touch ID or your device passcode when it opens and hides its content in the app switcher. App Lock is a screen lock; it does not add encryption to your data.</p>
+
+<h2>Privacy</h2>
+<p>Daybook collects no data. See the <a href="privacy.html">privacy policy</a>.</p>
+
+<hr />
+<div lang="zh-CN">
+<h1>Daybook 支持</h1>
+<p>Daybook 是个人交易盈亏日历：记录每天的已实现盈亏，一眼看清盈利日与亏损日，并按账户回顾表现。它不连接券商、不执行交易、不托管资金、不提供投资建议。</p>
+<h2>联系</h2>
+<p>问题、故障或建议：<a href="https://github.com/zijianyuan-gh/pnl-app/issues">在 GitHub 提交 Issue</a>。请不要附上备份文件——其中包含你的交易记录。</p>
+<h2>备份</h2>
+<ul>
+  <li><strong>导出：</strong>账户 → 导出完整备份（JSON）→ 存储到“文件”（如 iCloud 云盘）。</li>
+  <li><strong>恢复：</strong>账户 → 从备份恢复 → 选择文件。恢复前会校验文件的 SHA-256；「合并」不会产生重复；「替换」需要确认，并可立即撤销。</li>
+  <li><strong>iOS App 自动副本：</strong>每次修改后，App 会在「文件 → 我的 iPhone → Daybook」保存完整备份。如果 App 存储被发现为空，Daybook 会提示从中恢复。</li>
+  <li>数据不会在设备之间同步，请用备份文件迁移。</li>
+</ul>
+<h2>从网页版迁移到 iOS App</h2>
+<ol>
+  <li>在网页版（Safari 或主屏幕图标）中：账户 → 导出完整备份（JSON）→ 存储到“文件”。</li>
+  <li>从 App Store 安装并打开 Daybook。</li>
+  <li>账户 → 从备份恢复 → 选择该文件 → 替换（或合并）。</li>
+  <li>核对余额和几笔交易。网页版中的数据不会被删除，之后可在网页版中用「账户 → 清空全部数据」自行删除。</li>
+</ol>
+<h2>应用锁（面容 ID / 触控 ID）</h2>
+<p>账户 → 偏好设置 → 应用锁。开启后，打开 Daybook 需要面容 ID、触控 ID 或设备密码，并在多任务界面中隐藏内容。应用锁是屏幕锁，不会对数据另行加密。</p>
+<h2>隐私</h2>
+<p>Daybook 不收集任何数据，详见 <a href="privacy.html">隐私政策</a>。</p>
+</div>
+</main>
+</body>
+</html>

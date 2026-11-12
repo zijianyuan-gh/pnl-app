@@ -19,6 +19,13 @@ test('the live site is the build that was just deployed, over HTTPS, with PWA as
   for (const i of m.icons) expect((await request.get(i.src)).status(), i.src).toBe(200);
   expect((await request.get('sw.js')).status()).toBe(200);
   expect((await request.get('icons/apple-touch-icon.png')).status()).toBe(200);
+  // App Store metadata points at these two pages
+  const privacy = await request.get('privacy.html');
+  expect(privacy.status()).toBe(200);
+  expect(await privacy.text()).toContain('Daybook does not collect any data');
+  const support = await request.get('support.html');
+  expect(support.status()).toBe(200);
+  expect(await support.text()).toContain('Moving from the web app to the iOS app');
 });
 
 test('a first-time visitor gets an empty app — no shipped trades', async ({ page }) => {
