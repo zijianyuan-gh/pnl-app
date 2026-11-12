@@ -12,6 +12,8 @@ final class AppUITests: XCTestCase {
         continueAfterFailure = false
         app = XCUIApplication()
         app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        // Synthetic PWA backup (CI: TEST_RUNNER_DEMO_JSON); the Debug app writes it to Documents
+        if let seed = env["DEMO_JSON"] { app.launchEnvironment["DAYBOOK_UITEST_SEED_JSON"] = seed }
     }
 
     /// On any failure keep a screenshot and the accessibility tree (CI publishes them).
@@ -211,10 +213,7 @@ final class AppUITests: XCTestCase {
         launchAndWait()
         tab("Accounts")
         // WebKit exposes <input role="switch"> as a switch (or a checkbox on older iOS)
-        let switchType = NSNumber(value: XCUIElement.ElementType.`switch`.rawValue)
-        let checkBoxType = NSNumber(value: XCUIElement.ElementType.checkBox.rawValue)
-        let toggle = web.descendants(matching: .any).matching(NSPredicate(
-            format: "label == %@ AND (elementType == %@ OR elementType == %@)", "App Lock", switchType, checkBoxType)).firstMatch
+        let toggle = web.switches["App Lock"].firstMatch
         reveal(toggle)
         XCTAssertTrue(toggle.waitForExistence(timeout: 10), "App Lock switch not found (is biometry/passcode available?)")
         toggle.tap()

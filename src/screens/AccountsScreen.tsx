@@ -21,7 +21,7 @@ import { accountBalance, combinedBalance, type BalanceBreakdown } from '../lib/s
 import { AccountForm } from '../components/QuickAdd';
 import { FlowRow } from '../components/rows';
 import { CsvImportSheet, ExportSheet, RestoreSheet, type PendingExport } from '../components/DataSheets';
-import { AccountDot, Button, EmptyState, Group, InfoTip, Money, Row, Segmented, Sheet } from '../components/ui';
+import { AccountDot, Button, EmptyState, Group, InfoTip, Money, Row, Segmented, Sheet, cx } from '../components/ui';
 
 const BACKUP_DUE_DAYS = 14;
 /** Public pages (privacy policy, support) — same in the browser and in the iOS app. */
@@ -358,7 +358,7 @@ function DataSection() {
           <span className="flex gap-2">
             <ShieldCheck size={15} className="mt-0.5 shrink-0" />
             <span>
-              {T.data.localNote}
+              {isNative() ? T.native.localNote : T.data.localNote}
               <span className="mt-1.5 block" data-testid="backup-security">
                 {T.data.backupSecurity}
               </span>
@@ -398,6 +398,7 @@ function DataSection() {
             {T.data.safariTabWarning}
           </div>
         )}
+        {isNative() && <NativeErrorRow />}
         {isNative() ? (
           <NativeAutoBackupRow />
         ) : (
@@ -429,6 +430,19 @@ function DataSection() {
   );
 }
 
+/** Shown only if a native service failed — makes problems visible instead of silent. */
+function NativeErrorRow() {
+  const { T } = useApp();
+  const st = useNativeStatus();
+  if (!st.nativeError) return null;
+  return (
+    <div className="flex items-start gap-2 border-t border-line bg-neg/10 px-4 py-2.5 text-[13px] leading-snug text-neg" role="alert" data-testid="native-error">
+      <AlertTriangle size={15} className="mt-0.5 shrink-0" aria-hidden />
+      {fmt(T.native.unavailable, { msg: st.nativeError })}
+    </div>
+  );
+}
+
 function NativeAutoBackupRow() {
   const { T, locale } = useApp();
   const st = useNativeStatus();
@@ -452,32 +466,47 @@ function AppLockRow() {
   const st = useNativeStatus();
   const on = !!settings.appLock;
   const method = biometryLabel(T, st.biometry);
+  const toggle = async () => {
+    // Changing the lock always requires the owner to authenticate
+    let r: { success: boolean; error?: string };
+    try {
+      r = await DaybookNative.authenticate({ reason: T.lock.reason, cancelTitle: T.common.cancel });
+    } catch (e) {
+      toast({ message: fmt(T.errors.generic, { msg: String((e as Error)?.message ?? e) }), tone: 'error' });
+      return;
+    }
+    if (!r.success) {
+      if (r.error === 'passcode_not_set') toast({ message: T.lock.noPasscode, tone: 'error' });
+      else if (r.error !== 'cancelled') toast({ message: T.lock.failed, tone: 'error' });
+      return;
+    }
+    await setSettings({ appLock: !on });
+    toast({ message: !on ? T.lock.on : T.lock.off, tone: 'success' });
+  };
   return (
-    <label className="flex min-h-[52px] cursor-pointer items-start gap-3 border-t border-line px-4 py-3" data-testid="app-lock-row">
+    <div className="flex min-h-[52px] items-start gap-3 border-t border-line px-4 py-3" data-testid="app-lock-row">
       <Lock size={18} className="mt-0.5 shrink-0 text-ink-2" aria-hidden />
       <span className="min-w-0 flex-1">
-        <span className="block text-[15px]">{T.lock.setting}</span>
-        <span className="mt-0.5 block text-[13px] leading-snug text-ink-3">{fmt(T.lock.settingHelp, { method })}</span>
+        <span className="block text-[15px]" id="app-lock-label">
+          {T.lock.setting}
+        </span>
+        <span className="mt-0.5 block text-[13px] leading-snug text-ink-3">
+          {st.biometry === 'none' ? T.lock.settingHelpPasscode : fmt(T.lock.settingHelp, { method })}
+        </span>
       </span>
-      <input
-        type="checkbox"
+      {/* iOS-style switch */}
+      <button
+        type="button"
         role="switch"
-        className="mt-1 h-6 w-6 shrink-0 accent-[#3ddc97]"
-        checked={on}
+        aria-checked={on}
         aria-label={T.lock.setting}
         data-testid="app-lock-toggle"
-        onChange={async () => {
-          // Changing the lock always requires the owner to authenticate
-          const r = await DaybookNative.authenticate({ reason: T.lock.reason, cancelTitle: T.common.cancel }).catch(() => ({ success: false, error: 'failed' }));
-          if (!r.success) {
-            if (r.error === 'passcode_not_set') toast({ message: T.lock.noPasscode, tone: 'error' });
-            return;
-          }
-          await setSettings({ appLock: !on });
-          toast({ message: !on ? T.lock.on : T.lock.off, tone: 'success' });
-        }}
-      />
-    </label>
+        onClick={() => void toggle()}
+        className={cx('relative mt-0.5 h-[31px] w-[51px] shrink-0 rounded-full transition-colors', on ? 'bg-pos' : 'bg-surface-3')}
+      >
+        <span className={cx('absolute top-[2px] h-[27px] w-[27px] rounded-full bg-white shadow transition-[left]', on ? 'left-[22px]' : 'left-[2px]')} aria-hidden />
+      </button>
+    </div>
   );
 }
 
@@ -515,7 +544,7 @@ function AboutSection() {
           {T.appName} · {fmt(T.about.version, { v: __APP_VERSION__ })}
         </p>
         <p className="mt-1">{T.about.disclaimer}</p>
-        <p className="mt-1">{T.about.privacy}</p>
+        <p className="mt-1">{isNative() ? T.about.privacyNative : T.about.privacy}</p>
         {!isNative() && <p className="mt-1">{T.about.install}</p>}
         <p className="mt-2 flex gap-4">
           <a className="font-medium text-link underline-offset-2 hover:underline" href={`${SITE}privacy.html`} target="_blank" rel="noopener noreferrer" data-testid="privacy-link">

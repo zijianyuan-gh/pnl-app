@@ -15,8 +15,10 @@ interface NativeStatus {
   autoBackupError: string | null;
   biometry: 'faceID' | 'touchID' | 'opticID' | 'none';
   canAuthenticate: boolean;
+  /** set when a call into the native plugin fails (shown in Settings, never silent) */
+  nativeError: string | null;
 }
-let status: NativeStatus = { autoBackupAt: null, autoBackupError: null, biometry: 'none', canAuthenticate: false };
+let status: NativeStatus = { autoBackupAt: null, autoBackupError: null, biometry: 'none', canAuthenticate: false, nativeError: null };
 const listeners = new Set<() => void>();
 function setStatus(p: Partial<NativeStatus>) {
   status = { ...status, ...p };
@@ -70,13 +72,14 @@ function AutoBackup() {
           setOffer(d);
           setPhase('offer');
         } else setPhase('ready');
-      } catch {
+      } catch (e) {
+        setStatus({ nativeError: `readSnapshot: ${String((e as Error)?.message ?? e)}` });
         if (alive) setPhase('ready');
       }
     })();
     void DaybookNative.biometry()
       .then((b) => setStatus({ biometry: b.biometry, canAuthenticate: b.available }))
-      .catch(() => {});
+      .catch((e) => setStatus({ nativeError: `biometry: ${String((e as Error)?.message ?? e)}` }));
     return () => {
       alive = false;
     };

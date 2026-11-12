@@ -219,17 +219,10 @@ jobs:
           set -o pipefail
           xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug \
             -destination "id=$UDID" -derivedDataPath build/dd CODE_SIGNING_ALLOWED=NO build-for-testing | tail -25
-      - name: Install and seed a PWA backup (synthetic data)
+      - name: Prepare a synthetic PWA backup for the tests
         run: |
           node scripts/make-demo-backup.mjs build/demo
           echo "DEMO_BALANCE=$(node -p "require('./build/demo/expected.json').balance")" >> "$GITHUB_ENV"
-          xcrun simctl install "$UDID" build/dd/Build/Products/Debug-iphonesimulator/App.app
-          DATA=$(xcrun simctl get_app_container "$UDID" io.github.zijianyuangh.daybook data)
-          mkdir -p "$DATA/Documents"
-          cp build/demo/demo-backup.json "$DATA/Documents/Daybook Auto-Backup.json"
-          cp build/demo/demo-backup.json "$DATA/Documents/Daybook PWA backup.json"
-          echo "DATA=$DATA" >> "$GITHUB_ENV"
-          ls -la "$DATA/Documents"
       - name: Enroll Face ID and auto-match prompts in the background
         run: |
           xcrun simctl spawn "$UDID" notifyutil -s com.apple.BiometricKit.enrollmentChanged '1'
@@ -241,6 +234,8 @@ jobs:
           TEST_RUNNER_FACEID: '1'
         run: |
           set -o pipefail
+          # the Debug app writes this backup into its Documents folder (see DaybookViewController.seedForUITests)
+          export TEST_RUNNER_DEMO_JSON="$(node -e 'process.stdout.write(JSON.stringify(require("./build/demo/demo-backup.json")))')"
           mkdir -p build/ci-output
           xcodebuild -project ios/App/App.xcodeproj -scheme App -destination "id=$UDID" -derivedDataPath build/dd \
             -resultBundlePath build/UITests.xcresult CODE_SIGNING_ALLOWED=NO test-without-building 2>&1 \
@@ -252,7 +247,12 @@ jobs:
           mkdir -p build/screenshots build/ci-output
           xcrun xcresulttool export attachments --path build/UITests.xcresult --output-path build/screenshots || true
           ls -la build/screenshots | head -60
+          DATA=$(xcrun simctl get_app_container "$UDID" io.github.zijianyuangh.daybook data 2>/dev/null || true)
+          echo "DATA=$DATA" >> "$GITHUB_ENV"
           echo "--- app Documents after the tests:"; ls -la "$DATA/Documents" || true
+          # app + web console log (Capacitor forwards console output in Debug builds)
+          xcrun simctl spawn "$UDID" log show --last 30m --style compact --predicate 'process == "App"' > build/ci-output/app.log 2>&1 || true
+          grep -iE "error|exception|not implemented|DaybookNative" build/ci-output/app.log | tail -40 || true
       - name: Publish screenshots and logs to the ios-ci-output branch (main only)
         if: always() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         env:

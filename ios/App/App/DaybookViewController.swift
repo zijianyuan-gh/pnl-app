@@ -8,6 +8,9 @@ class DaybookViewController: CAPBridgeViewController {
 
     override func capacitorDidLoad() {
         bridge?.registerPluginInstance(DaybookNativePlugin())
+        #if DEBUG
+        seedForUITests()
+        #endif
         view.backgroundColor = UIColor(red: 10 / 255, green: 10 / 255, blue: 11 / 255, alpha: 1)
         webView?.isOpaque = false
         webView?.backgroundColor = view.backgroundColor
@@ -36,6 +39,22 @@ class DaybookViewController: CAPBridgeViewController {
         view.addSubview(v)
         cover = v
     }
+
+    #if DEBUG
+    /// UI tests only (compiled out of Release/App Store builds): place a backup file in Documents
+    /// exactly where a user's saved backup / the automatic copy would be. Never overwrites a file.
+    private func seedForUITests() {
+        guard let json = ProcessInfo.processInfo.environment["DAYBOOK_UITEST_SEED_JSON"], !json.isEmpty,
+              let docs = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+        else { return }
+        for name in [DaybookNativePlugin.snapshotName, "Daybook PWA backup.json"] {
+            let url = docs.appendingPathComponent(name)
+            if !FileManager.default.fileExists(atPath: url.path) {
+                try? Data(json.utf8).write(to: url, options: .atomic)
+            }
+        }
+    }
+    #endif
 
     @objc private func didBecomeActive() {
         cover?.removeFromSuperview()

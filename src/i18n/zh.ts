@@ -332,6 +332,7 @@ export const zh: Dict = {
     system: '跟随系统',
   },
   about: {
+    privacyNative: '无需注册、没有服务器、没有追踪。所有数据都保存在这台 iPhone 上，可离线使用。',
     privacyPolicy: '隐私政策',
     support: '支持',
     disclaimer: 'Daybook 是个人交易记录与分析工具，不执行任何交易、不托管资金、不提供投资建议。',
@@ -341,6 +342,7 @@ export const zh: Dict = {
     install: '安装到 iPhone：用 Safari 打开 → 分享 → 添加到主屏幕。',
   },
   lock: {
+    settingHelpPasscode: '打开 Daybook 时需要设备密码。应用锁只是屏幕锁：它会隐藏应用内容，但不会对数据另行加密。',
     title: 'Daybook 已锁定',
     unlockWith: '使用{method}解锁',
     reason: '解锁 Daybook',
@@ -353,6 +355,8 @@ export const zh: Dict = {
     off: '应用锁已关闭',
   },
   native: {
+    localNote: '你的数据只保存在这台 iPhone 上的本 App 中，不会同步到其他设备；删除 App 会同时删除数据和自动备份副本。请定期导出备份，并保存到 iCloud 云盘或其他私密位置。',
+    unavailable: '原生功能不可用：{msg}',
     mode: '正在以 iOS App 方式运行（可离线使用）',
     autoBackup: '自动备份副本',
     autoBackupHelp: '每次修改后，Daybook 都会把完整备份保存到「文件 → 我的 iPhone → Daybook」。它只在这台 iPhone 及其设备备份中；请不时导出备份，在别处再保留一份。',

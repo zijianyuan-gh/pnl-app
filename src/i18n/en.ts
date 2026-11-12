@@ -330,6 +330,7 @@ export const en = {
     system: 'System',
   },
   about: {
+    privacyNative: 'No accounts, no servers, no tracking. Everything stays on this iPhone and works offline.',
     privacyPolicy: 'Privacy Policy',
     support: 'Support',
     disclaimer: 'Daybook is a personal record-keeping and analysis tool. It does not execute trades, hold money or give investment advice.',
@@ -339,6 +340,7 @@ export const en = {
     install: 'Install on iPhone: open in Safari → Share → Add to Home Screen.',
   },
   lock: {
+    settingHelpPasscode: 'Require your device passcode to open Daybook. App Lock is a screen lock: it hides the app, it does not encrypt your data.',
     title: 'Daybook is locked',
     unlockWith: 'Unlock with {method}',
     reason: 'Unlock Daybook',
@@ -351,6 +353,8 @@ export const en = {
     off: 'App Lock is off',
   },
   native: {
+    localNote: 'Your data is stored only in this app on this iPhone. It does not sync to other devices, and deleting the app erases it — including the automatic backup copy. Export a backup regularly and keep it in iCloud Drive or another private place.',
+    unavailable: 'Native features are unavailable: {msg}',
     mode: 'Running as the iOS app (works offline)',
     autoBackup: 'Automatic backup copy',
     autoBackupHelp: 'After every change Daybook saves a full backup to Files → On My iPhone → Daybook. It stays on this iPhone and in your iPhone backups; export a backup now and then to keep a copy elsewhere.',

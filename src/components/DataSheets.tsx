@@ -274,7 +274,7 @@ export function RestoreSheet({ open, onClose, onExportFirst }: { open: boolean; 
         </div>
       )}
       {!backup && !error && (
-        <p className="mt-4 px-1 text-[13px] leading-relaxed text-ink-3">{T.data.localNote}</p>
+        <p className="mt-4 px-1 text-[13px] leading-relaxed text-ink-3">{isNative() ? T.native.localNote : T.data.localNote}</p>
       )}
     </Sheet>
   );
