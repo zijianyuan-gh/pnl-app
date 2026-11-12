@@ -211,8 +211,19 @@ jobs:
         run: |
           UDID=$(xcrun simctl list devices available -j | python3 scripts/ios-pick-simulator.py)
           echo "UDID=$UDID" >> "$GITHUB_ENV"
+          # Use the on-screen keyboard (as on an iPhone), so the UI tests can check Quick Add above it
+          python3 - "$UDID" <<'PY'
+          import plistlib, os, sys
+          p = os.path.expanduser("~/Library/Preferences/com.apple.iphonesimulator.plist")
+          d = plistlib.load(open(p, "rb")) if os.path.exists(p) else {}
+          d["ConnectHardwareKeyboard"] = False
+          d.setdefault("DevicePreferences", {}).setdefault(sys.argv[1], {})["ConnectHardwareKeyboard"] = False
+          plistlib.dump(d, open(p, "wb"))
+          PY
           xcrun simctl boot "$UDID" || true
           xcrun simctl bootstatus "$UDID" -b
+          open -a Simulator --args -CurrentDeviceUDID "$UDID" || true
+          sleep 5
           xcrun simctl status_bar "$UDID" override --time 9:41 --dataNetwork wifi --wifiBars 3 --cellularBars 4 --batteryState charged --batteryLevel 100
       - name: Build app + UI tests (simulator)
         run: |

@@ -115,6 +115,28 @@ final class AppUITests: XCTestCase {
         return done()
     }
 
+    /// With the on-screen keyboard up (CI turns the simulator's hardware keyboard off), the amount
+    /// and a Save button must stay visible above it. Records "not shown" instead of guessing.
+    private func checkQuickAddAboveKeyboard(_ field: XCUIElement) {
+        let kb = app.keyboards.firstMatch
+        let note: String
+        if kb.waitForExistence(timeout: 5) {
+            Thread.sleep(forTimeInterval: 0.8) // let the sheet settle
+            shot("kbd-quick-add")
+            let top = kb.frame.minY
+            XCTAssertLessThanOrEqual(field.frame.maxY, top + 1, "amount field covered by the keyboard")
+            let saves = web.buttons.matching(NSPredicate(format: "label == %@", "Save")).allElementsBoundByIndex
+            XCTAssertTrue(saves.contains { $0.isHittable && $0.frame.maxY <= top + 1 }, "no Save button above the keyboard")
+            note = "software keyboard shown: keyboard top \(top), amount field bottom \(field.frame.maxY)"
+        } else {
+            note = "software keyboard NOT shown (hardware keyboard connected) - layout above the keyboard not checked"
+        }
+        let a = XCTAttachment(string: note)
+        a.name = "keyboard-check"
+        a.lifetime = .keepAlways
+        add(a)
+    }
+
     private func dismissSystemAlertIfPresent() {
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         for label in ["OK", "Allow"] where springboard.buttons[label].waitForExistence(timeout: 2) {
@@ -154,6 +176,7 @@ final class AppUITests: XCTestCase {
         expectation(for: focused, evaluatedWith: field)
         waitForExpectations(timeout: 10)
         field.typeText("128.40")
+        checkQuickAddAboveKeyboard(field)
         control("Loss").tap()
         Thread.sleep(forTimeInterval: 0.8)
         shot("en-2-quick-add")
