@@ -244,9 +244,11 @@ jobs:
           nohup bash -c 'while true; do
               for f in "$0"/match-*; do
                 [ -e "$f" ] || continue
+                id="${f##*/match-}"
                 rm -f "$f"
                 xcrun simctl spawn "$1" notifyutil -p com.apple.BiometricKit_Sim.pearl.match
-                echo "$(date +%T) face matched"
+                touch "$0/matched-$id"
+                echo "$(date +%T) face matched ($id)"
               done
               sleep 0.3
             done' "$PWD/build/faceid" "$UDID" > build/ci-output/faceid.log 2>&1 &

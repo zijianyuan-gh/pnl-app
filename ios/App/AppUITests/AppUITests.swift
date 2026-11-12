@@ -60,7 +60,9 @@ final class AppUITests: XCTestCase {
         button(cancel).tap()
         tab(tabs[1]); shot("\(p)-3-trades")
         tab(tabs[2]); shot("\(p)-4-analytics")
-        tab(tabs[3]); shot("\(p)-5-accounts")
+        tab(tabs[3])
+        for _ in 0..<4 { web.swipeDown() } // from the top, as in every language
+        shot("\(p)-5-accounts")
     }
     private func hasKeyboardFocus(_ e: XCUIElement) -> Bool { (e.value(forKey: "hasKeyboardFocus") as? Bool) ?? false }
 
@@ -114,23 +116,30 @@ final class AppUITests: XCTestCase {
 
     /// Simulated Face ID: CI turns each request file into exactly one "matching face" event, so a
     /// prompt is only ever satisfied when the test asks (see the workflow, job "ios").
+    /// Returns once CI has delivered the match (it answers with "matched-<id>"), so no request is
+    /// ever still in flight when the test moves on — a late match could unlock a later prompt.
     private func requestFaceIDMatch(file: StaticString = #filePath, line: UInt = #line) {
         guard let dir = env["FACEID_DIR"] else { return XCTFail("FACEID_DIR not set", file: file, line: line) }
-        let path = (dir as NSString).appendingPathComponent("match-\(UUID().uuidString)")
-        XCTAssertTrue(FileManager.default.createFile(atPath: path, contents: Data()), "cannot write \(path)", file: file, line: line)
+        let id = UUID().uuidString
+        let request = (dir as NSString).appendingPathComponent("match-\(id)")
+        let ack = (dir as NSString).appendingPathComponent("matched-\(id)")
+        XCTAssertTrue(FileManager.default.createFile(atPath: request, contents: Data()), "cannot write \(request)", file: file, line: line)
+        let end = Date().addingTimeInterval(20)
+        while !FileManager.default.fileExists(atPath: ack) && Date() < end { Thread.sleep(forTimeInterval: 0.2) }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: ack), "Face ID match was not delivered", file: file, line: line)
     }
 
-    /// Ask for a Face ID match every 2 s (the prompt may still be animating in) until `done()`.
-    private func matchFaceID(timeout: TimeInterval = 40, until done: () -> Bool) -> Bool {
+    /// Deliver one Face ID match at a time (the prompt may still be animating in) until `done()`.
+    private func matchFaceID(timeout: TimeInterval = 45, until done: () -> Bool) -> Bool {
         let end = Date().addingTimeInterval(timeout)
-        var next = Date()
         while Date() < end {
             if done() { return true }
-            if Date() >= next {
-                requestFaceIDMatch()
-                next = Date().addingTimeInterval(2)
+            requestFaceIDMatch()
+            let settle = Date().addingTimeInterval(3)
+            while Date() < settle {
+                if done() { return true }
+                Thread.sleep(forTimeInterval: 0.25)
             }
-            Thread.sleep(forTimeInterval: 0.25)
         }
         return done()
     }
@@ -274,9 +283,10 @@ final class AppUITests: XCTestCase {
         shot("picker-2-browse")
         let onMyIPhone = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "On My iPhone")).firstMatch
         if onMyIPhone.waitForExistence(timeout: 5) { onMyIPhone.tap() }
-        let folder = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", "Daybook")).firstMatch
+        // the app's own folder is a cell ("Daybook, Container"); don't hit other "Daybook" texts
+        let folder = app.cells.matching(NSPredicate(format: "label BEGINSWITH %@", "Daybook")).firstMatch
         if folder.waitForExistence(timeout: 5) { folder.tap() }
-        let file = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "PWA backup")).firstMatch
+        let file = app.cells.matching(NSPredicate(format: "label CONTAINS %@", "PWA backup")).firstMatch
         let found = file.waitForExistence(timeout: 15)
         shot("picker-3-folder")
         let folderTree = XCTAttachment(string: String(app.debugDescription.prefix(150_000)))

@@ -91,8 +91,8 @@ export function Segmented<T extends string>({
             aria-checked={active}
             onClick={() => onChange(o.value)}
             className={cx(
-              'flex-1 rounded-[9px] px-2 font-semibold transition',
-              size === 'md' ? 'min-h-10 text-[15px]' : 'min-h-8 text-[13px]',
+              'flex-1 whitespace-nowrap rounded-[9px] font-semibold transition',
+              size === 'md' ? 'min-h-10 px-2 text-[15px]' : 'min-h-8 px-1 text-[13px]',
               active
                 ? o.tone === 'pos'
                   ? 'bg-pos/18 text-pos shadow-sm'
