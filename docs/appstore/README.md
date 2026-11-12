@@ -8,7 +8,7 @@ Everything needed to submit Daybook to the App Store, except what only the accou
 | `review-notes.md` | Paste into App Review Information → Notes |
 | `privacy-label.md` | App Privacy questionnaire answers (Data Not Collected), export compliance |
 | `guidelines.md` | How the app addresses Guidelines 3.2.1(viii), 5.1.1(ix), 4.1, 4.2, 4.3, 5.1 |
-| `screenshots/` | Real screenshots from the iOS app in the Simulator (6.9", 1320 × 2868), EN + 中文 |
+| `screenshots/en/`, `screenshots/zh-Hans/` | Real screenshots of the iOS app, taken by the UI tests in the iOS Simulator (iPhone 17 Pro Max = 6.9" display, 1320 × 2868), synthetic demo data. Refresh: `python3 scripts/ios-appstore-screenshots.py <exported attachments>` (CI publishes them on the `ios-ci-output` branch) |
 | Privacy policy | https://zijianyuan-gh.github.io/pnl-app/privacy.html (source: `public/privacy.html`) |
 | Support page | https://zijianyuan-gh.github.io/pnl-app/support.html (source: `public/support.html`) |
 
@@ -25,7 +25,7 @@ The Bundle ID can still be changed before the first upload (edit `scripts/ios-pr
    In Xcode: select the **App** target → *Signing & Capabilities* → tick *Automatically manage signing* → choose your **Team**. Xcode creates the certificate and the App ID for you.
 3. **Try it on your iPhone first:** plug the iPhone in, select it as the run destination, press ▶︎ (or use TestFlight after step 4). Go through the 8-step checklist in `../iPhone安装与验收指南.md`, using the iOS app.
 4. **Upload:** *Product → Archive* → *Distribute App* → *App Store Connect* → *Upload*. For every later upload run `npm run ios:version` first (build number must increase).
-5. **App Store Connect** (https://appstoreconnect.apple.com): *Apps → +* → New App with the Bundle ID above; paste the metadata, upload `screenshots/`, set the Privacy Policy URL, answer App Privacy with `privacy-label.md`, paste `review-notes.md` with your contact, choose the uploaded build, *Submit for Review*.
+5. **App Store Connect** (https://appstoreconnect.apple.com): *Apps → +* → New App with the Bundle ID above; paste the metadata, upload `screenshots/en` (English) and `screenshots/zh-Hans` (Simplified Chinese localization) to the 6.9" iPhone slot, set the Privacy Policy URL, answer App Privacy with `privacy-label.md`, paste `review-notes.md` with your contact, choose the uploaded build, *Submit for Review*.
 
 Nobody else should need your Apple ID password, certificates or keys; don't share them.
 
