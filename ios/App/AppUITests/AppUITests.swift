@@ -42,6 +42,26 @@ final class AppUITests: XCTestCase {
         web.descendants(matching: .any).matching(NSPredicate(format: "label == %@ AND elementType != %@", label, NSNumber(value: XCUIElement.ElementType.staticText.rawValue))).firstMatch
     }
     private var amountField: XCUIElement { web.textFields["Net realized P&L"].firstMatch }
+
+    /// One screenshot of every main screen in the current language, Quick Add with a typed loss.
+    private func screenshotSet(_ p: String, add: String, amount: String, loss: String, cancel: String, discard: String, tabs: [String]) {
+        tab(tabs[0]); shot("\(p)-1-calendar")
+        button(add).tap()
+        let field = wait(web.textFields[amount].firstMatch)
+        field.typeText("128.40")
+        if p == "en" { checkQuickAddAboveKeyboard(field) }
+        control(loss).tap()
+        Thread.sleep(forTimeInterval: 0.8)
+        shot("\(p)-2-quick-add")
+        button(cancel).tap()
+        // the half-typed entry is kept as a draft; discard it so later steps start clean
+        button(add).tap()
+        if button(discard).waitForExistence(timeout: 3) { button(discard).tap() }
+        button(cancel).tap()
+        tab(tabs[1]); shot("\(p)-3-trades")
+        tab(tabs[2]); shot("\(p)-4-analytics")
+        tab(tabs[3]); shot("\(p)-5-accounts")
+    }
     private func hasKeyboardFocus(_ e: XCUIElement) -> Bool { (e.value(forKey: "hasKeyboardFocus") as? Bool) ?? false }
 
     /// Types into the amount field, focusing it first if needed.
@@ -167,37 +187,24 @@ final class AppUITests: XCTestCase {
 
     func test2_screenshots() throws {
         launchAndWait()
-        shot("en-1-calendar")
 
-        button("Add").tap()
         // keyboard priming: the amount field has keyboard focus right after tapping +, no extra tap
-        let field = wait(amountField)
-        let focused = NSPredicate(format: "hasKeyboardFocus == true")
-        expectation(for: focused, evaluatedWith: field)
-        waitForExpectations(timeout: 10)
-        field.typeText("128.40")
-        checkQuickAddAboveKeyboard(field)
-        control("Loss").tap()
-        Thread.sleep(forTimeInterval: 0.8)
-        shot("en-2-quick-add")
-        button("Cancel").tap()
-        // the half-typed entry is kept as a draft; discard it so later tests start clean
         button("Add").tap()
-        if button("Discard").waitForExistence(timeout: 3) { button("Discard").tap() }
+        let field = wait(amountField)
+        expectation(for: NSPredicate(format: "hasKeyboardFocus == true"), evaluatedWith: field)
+        waitForExpectations(timeout: 10)
         button("Cancel").tap()
 
-        tab("Trades"); shot("en-3-trades")
-        tab("Analytics"); shot("en-4-analytics")
-        tab("Accounts"); shot("en-5-accounts")
+        screenshotSet("en", add: "Add", amount: "Net realized P&L", loss: "Loss", cancel: "Cancel", discard: "Discard",
+                      tabs: ["Calendar", "Trades", "Analytics", "Accounts"])
 
-        // Chinese UI
+        // 简体中文 (switched in Accounts → Preferences → Language)
         let zh = control("中文")
         reveal(zh)
         zh.tap()
         wait(button("日历"))
-        tab("日历"); shot("zh-1-calendar")
-        tab("统计"); shot("zh-4-analytics")
-        tab("账户")
+        screenshotSet("zh", add: "记录", amount: "已实现净盈亏", loss: "亏损", cancel: "取消", discard: "丢弃",
+                      tabs: ["日历", "交易", "统计", "账户"])
         let en = control("EN")
         reveal(en)
         en.tap()
