@@ -104,6 +104,7 @@ jobs:
           xcrun simctl bootstatus "$UDID" -b   # still booted and ready
           xcrun simctl status_bar "$UDID" override --time 9:41 --dataNetwork wifi --wifiBars 3 --cellularBars 4 --batteryState charged --batteryLevel 100
       - name: Build app + UI tests (simulator)
+        id: build
         run: |
           set -o pipefail
           mkdir -p build/ci-output
@@ -153,6 +154,7 @@ jobs:
             | tee build/ci-output/xcodebuild-test.log \
             | grep -E "Test (Suite|Case)|error:|failed|passed|skipped|\*\* TEST" | tail -60
       - name: Updating the app keeps the data (reinstall over the existing app, then check)
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }} # runs (and can fail) on its own, even if a UI test above failed
         env:
           TEST_RUNNER_AFTER_REINSTALL: '1'
         run: |
@@ -185,6 +187,7 @@ jobs:
             2>&1 | tail -3000 > build/ci-output/files-service.log || true
           grep -E "Daybook" build/ci-output/app.log | grep -v XC_kAX | tail -20 || true
       - name: The iPhone app also runs on iPad (compatibility mode, Guideline 2.4.1)
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }} # runs (and can fail) on its own, even if a UI test above failed
         timeout-minutes: 12
         run: |
           xcrun simctl shutdown "$UDID" || true   # iPhone results are exported; free the machine
@@ -230,6 +233,7 @@ jobs:
             build/UpdateTest.xcresult
           retention-days: 30
       - name: Release archive for a real iPhone (unsigned — proves the device build compiles)
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }} # runs (and can fail) on its own, even if a UI test above failed
         run: |
           set -o pipefail
           xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release \
@@ -254,6 +258,8 @@ jobs:
   mac:
     # after the iOS job: two macOS jobs at once left this one waiting for a runner until GitHub cancelled it
     needs: [web, ios]
+    # after the iOS job, also when it failed (its own checks still count); never without a passing web job
+    if: ${{ !cancelled() && needs.web.result == 'success' }}
     runs-on: macos-latest
     timeout-minutes: 30
     env:
