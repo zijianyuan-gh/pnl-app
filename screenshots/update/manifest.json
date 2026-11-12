@@ -1,0 +1,17 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "5277349A-B219-4ED4-853A-8AE666B9F5B1",
+        "deviceName" : "iPhone 17 Pro Max",
+        "exportedFileName" : "4702B61C-0175-43D5-8A4E-B815A97F74D0.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "update-1-data-kept_0_974583D8-01E6-4571-A32D-3AF257C5253E.png",
+        "timestamp" : 1794517201.745
+      }
+    ],
+    "testIdentifier" : "AppUITests/testZ_dataSurvivesReinstall()",
+    "testIdentifierURL" : "test://com.apple.xcode/App/AppUITests/AppUITests/testZ_dataSurvivesReinstall"
+  }
+]

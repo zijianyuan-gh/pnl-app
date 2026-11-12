@@ -1,0 +1,102 @@
+Command line invocation:
+    /Applications/Xcode_26.6.app/Contents/Developer/usr/bin/xcodebuild -project ios/App/App.xcodeproj -scheme App -destination id=5277349A-B219-4ED4-853A-8AE666B9F5B1 -derivedDataPath build/dd -resultBundlePath build/UpdateTest.xcresult "-only-testing:AppUITests/AppUITests/testZ_dataSurvivesReinstall" CODE_SIGNING_ALLOWED=NO test-without-building
+
+Build settings from command line:
+    CODE_SIGNING_ALLOWED = NO
+
+Resolve Package Graph
+
+
+Resolved source packages:
+  CapApp-SPM: /Users/runner/work/pnl-app/pnl-app/ios/App/CapApp-SPM @ local
+  capacitor-swift-pm: https://github.com/ionic-team/capacitor-swift-pm.git @ 8.5.3
+
+Writing result bundle at path:
+	/Users/runner/work/pnl-app/pnl-app/build/UpdateTest.xcresult
+
+--- xcodebuild: WARNING: Using the first of multiple matching destinations:
+{ platform:iOS Simulator, arch:arm64, id:5277349A-B219-4ED4-853A-8AE666B9F5B1, OS:26.5, name:iPhone 17 Pro Max }
+{ platform:iOS Simulator, arch:x86_64, id:5277349A-B219-4ED4-853A-8AE666B9F5B1, OS:26.5, name:iPhone 17 Pro Max }
+2026-11-12 20:59:50.464241+0000 AppUITests-Runner[29953:87373] [Default] Running tests...
+    t =      nans Interface orientation changed to Portrait
+Test Suite 'Selected tests' started at 2026-11-12 20:59:51.183.
+Test Suite 'AppUITests.xctest' started at 2026-11-12 20:59:51.183.
+Test Suite 'AppUITests' started at 2026-11-12 20:59:51.183.
+Test Case '-[AppUITests.AppUITests testZ_dataSurvivesReinstall]' started.
+    t =     0.00s Start Test at 2026-11-12 20:59:51.184
+    t =     0.03s Set Up
+    t =     0.03s Open io.github.zijianyuangh.daybook
+    t =     0.03s     Launch io.github.zijianyuangh.daybook
+2026-11-12 20:59:51.328 xcodebuild[29239:85603] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-11-12 20:59:51.328 xcodebuild[29239:85603] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     0.83s         Setting up automation session
+objc[29953]: Class UIAccessibilityLoaderWebShared is implemented in both /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebCore.axbundle/WebCore (0x10a8bc310) and /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/System/Library/AccessibilityBundles/WebKit.axbundle/WebKit (0x109c48398). This may cause spurious casting failures and mysterious crashes. One of the duplicates must be removed or renamed.
+    t =     2.21s         Wait for io.github.zijianyuangh.daybook to idle
+    t =     3.55s Checking existence of `"Calendar" Button`
+    t =     3.74s Checking existence of `StaticText (First Match)`
+    t =     3.81s Checking existence of `"日历" Button`
+    t =     3.87s Waiting 30.0s for "Calendar" Button to exist
+    t =     4.90s     Checking `Expect predicate `existsNoRetry == 1` for object "Calendar" Button`
+    t =     4.91s         Checking existence of `"Calendar" Button`
+    t =     4.96s Waiting 3.0s for StaticText (First Match) to exist
+    t =     6.06s     Checking `Expect predicate `existsNoRetry == 1` for object StaticText (First Match)`
+    t =     6.06s         Checking existence of `StaticText (First Match)`
+    t =     6.11s         Capturing element debug description
+    t =     7.04s     Checking `Expect predicate `existsNoRetry == 1` for object StaticText (First Match)`
+    t =     7.04s         Checking existence of `StaticText (First Match)`
+    t =     7.10s         Capturing element debug description
+    t =     7.97s     Checking `Expect predicate `existsNoRetry == 1` for object StaticText (First Match)`
+    t =     7.97s         Checking existence of `StaticText (First Match)`
+    t =     8.02s         Capturing element debug description
+    t =     8.02s     Checking existence of `StaticText (First Match)`
+    t =     8.08s Collecting debug information to assist test failure triage
+    t =     8.08s     Requesting snapshot of accessibility hierarchy for app with pid 29980
+    t =     8.17s Tap "Accounts" Button
+    t =     8.17s     Wait for io.github.zijianyuangh.daybook to idle
+    t =     8.18s     Find the "Accounts" Button
+    t =     8.24s     Check for interrupting elements affecting "Accounts" Button
+    t =     8.29s     Synthesize event
+    t =     8.60s     Wait for io.github.zijianyuangh.daybook to idle
+    t =     8.62s Checking existence of `"Accounts" StaticText`
+    t =     8.69s Checking existence of `"Accounts" StaticText`
+    t =     9.26s Waiting 20.0s for StaticText (First Match) to exist
+    t =    10.32s     Checking `Expect predicate `existsNoRetry == 1` for object StaticText (First Match)`
+    t =    10.32s         Checking existence of `StaticText (First Match)`
+    t =    10.37s Find the StaticText (First Match)
+    t =    10.56s Added attachment named 'update-1-data-kept'
+    t =    10.56s Tap "Calendar" Button
+    t =    10.56s     Wait for io.github.zijianyuangh.daybook to idle
+    t =    10.57s     Find the "Calendar" Button
+    t =    10.62s     Check for interrupting elements affecting "Calendar" Button
+    t =    10.66s     Synthesize event
+    t =    10.97s     Wait for io.github.zijianyuangh.daybook to idle
+    t =    10.97s Checking existence of `"Trades" StaticText`
+    t =    11.04s Checking existence of `"Analytics" StaticText`
+    t =    11.09s Checking existence of `"Accounts" StaticText`
+    t =    11.15s Checking existence of `"Trades" StaticText`
+    t =    11.22s Checking existence of `"Analytics" StaticText`
+    t =    11.27s Checking existence of `"Accounts" StaticText`
+    t =    11.84s Waiting 20.0s for Button (First Match) to exist
+    t =    12.90s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =    12.90s         Checking existence of `Button (First Match)`
+    t =    12.95s Waiting 20.0s for Button (First Match) to exist
+    t =    14.02s     Checking `Expect predicate `existsNoRetry == 1` for object Button (First Match)`
+    t =    14.02s         Checking existence of `Button (First Match)`
+    t =    14.08s Tear Down
+Test Case '-[AppUITests.AppUITests testZ_dataSurvivesReinstall]' passed (14.335 seconds).
+Test Suite 'AppUITests' passed at 2026-11-12 21:00:05.520.
+	 Executed 1 test, with 0 failures (0 unexpected) in 14.335 (14.337) seconds
+Test Suite 'AppUITests.xctest' passed at 2026-11-12 21:00:05.521.
+	 Executed 1 test, with 0 failures (0 unexpected) in 14.335 (14.338) seconds
+Test Suite 'Selected tests' passed at 2026-11-12 21:00:05.521.
+	 Executed 1 test, with 0 failures (0 unexpected) in 14.335 (14.339) seconds
+2026-11-12 21:00:06.124 xcodebuild[29239:85603] [MT] IDETestOperationsObserverDebug: 17.614 elapsed -- Testing started completed.
+2026-11-12 21:00:06.124 xcodebuild[29239:85603] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-11-12 21:00:06.124 xcodebuild[29239:85603] [MT] IDETestOperationsObserverDebug: 17.614 sec, +17.614 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/pnl-app/pnl-app/build/UpdateTest.xcresult
+
+** TEST EXECUTE SUCCEEDED **
+
+Testing started

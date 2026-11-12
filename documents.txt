@@ -1,0 +1,8 @@
+total 520
+drwxr-xr-x  7 runner  staff    224 Nov 12 20:59 .
+drwxr-xr-x@ 7 runner  staff    224 Nov 12 20:53 ..
+-rw-r--r--  1 runner  staff  63282 Nov 12 20:59 Daybook Auto-Backup.json
+-rw-r--r--@ 1 runner  staff    127 Nov 12 20:53 Daybook import.csv
+-rw-r--r--@ 1 runner  staff  61723 Nov 12 20:53 Daybook PWA backup.json
+-rw-r--r--@ 1 runner  staff  61742 Nov 12 20:53 Daybook tampered backup.json
+-rw-r--r--@ 1 runner  staff  62229 Nov 12 20:57 daybook-backup-2026-11-12-2057.json

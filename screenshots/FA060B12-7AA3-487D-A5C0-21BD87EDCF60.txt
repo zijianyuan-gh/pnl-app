@@ -1,0 +1,1 @@
+software keyboard shown: keyboard top 655.0, amount field bottom 320.0
