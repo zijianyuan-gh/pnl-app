@@ -106,6 +106,30 @@ curl -fsSL https://raw.githubusercontent.com/zijianyuan-gh/pnl-app/main/mac/inst
 
 本地版的数据保存在 Mac 默认浏览器中（地址 `127.0.0.1:47823`），与 iPhone、在线版互相独立；在设备之间迁移请使用备份导出与恢复。
 
+## iOS App（v1.2，准备上架 App Store）
+
+`ios/` 是用 Capacitor 8 生成的原生 Xcode 项目，复用同一套 React 代码与业务逻辑：
+
+- **离线优先**：生产构建的网页资源在 `npx cap sync ios` 时被打包进 App，从 `capacitor://localhost` 读取，从不加载网站；首次安装后无网络也能录入、查看、编辑。
+- **原生能力**（`ios/App/App/DaybookNativePlugin.swift`）：系统分享面板（存储到“文件”）、「文件」文档选择器导入备份/CSV、自动备份副本（文件 → 我的 iPhone → Daybook，保留前一天的副本）、面容 ID / 触控 ID / 设备密码应用锁（明确说明只是屏幕锁，不是加密）、多任务界面隐私遮罩。
+- **只申请一项权限**：面容 ID（仅用于可选的应用锁）。
+- **数据保护**：App 存储为空且存在自动备份副本时提示恢复；从不用空数据库覆盖副本；「清空全部数据」之前的副本不会再被提示。
+- **标识**：Bundle ID `io.github.zijianyuangh.daybook`，版本 1.2.0（build 1），仅 iPhone，iOS 15+。`npm run ios:version` 递增 build 号。
+
+常用命令（需要 macOS + Xcode）：
+
+```bash
+npm run ios:sync    # 生产构建并同步进 iOS 项目
+```
+
+```bash
+npm run ios:open    # 用 Xcode 打开
+```
+
+**PWA → iOS App 迁移**：在网页版「账户 → 导出完整备份」→ 存储到“文件”；在 iOS App「账户 → 从备份恢复」→ 选择该文件 → 替换或合并。网页版数据不会因此被删除。详见 `docs/appstore/README.md`。
+
+App Store 上架材料（元数据中英文、审核说明、隐私问卷答案、审核指南对照、截图）在 `docs/appstore/`。隐私政策与支持页面：<https://zijianyuan-gh.github.io/pnl-app/privacy.html>、<https://zijianyuan-gh.github.io/pnl-app/support.html>。
+
 ## 数据备份与恢复
 
 **备份**：账户 → 数据与备份 → 导出完整备份（JSON）。iPhone 上会先生成文件，再点「分享 / 存储到“文件”」打开 iOS 分享面板，选择「存储到“文件”」→ iCloud 云盘或“我的 iPhone”。**Daybook 无法自行写入 iCloud 云盘**，必须由你在分享面板中保存。超过 14 天未备份会提醒。
