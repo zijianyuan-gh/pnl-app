@@ -8,7 +8,7 @@ Daybook is a personal trading journal. People type in the results (profit or los
 
 What Daybook is NOT (re. Guidelines 3.2.1(viii) and 5.1.1(ix)): it does not connect to any broker, exchange, bank or wallet; it does not execute, route or facilitate trades; it does not hold, move or manage money; it provides no investment advice, signals or recommendations; it has no in-app purchases or links to financial services. All numbers are the user's own manual records.
 
-No sign-in is required and the app makes no network requests (its content is bundled in the app). It collects no data ("Data Not Collected").
+No sign-in is required. The app makes no network requests of its own (its content is bundled in the app); only the Privacy Policy and Support links in Accounts → About open in Safari when tapped. It collects no data ("Data Not Collected").
 
 How to try it (about 2 minutes):
 1. Tap "Create your first account", enter a name (e.g. "Stocks") and a starting balance, tap "New account".

@@ -7,7 +7,7 @@ App Store Connect → App Privacy → Get Started:
 
 Why this is accurate:
 - All records are stored only on the device (local database in the app; automatic backup file in the app's Documents folder).
-- The iOS app makes no network requests (its web content is bundled; production builds carry a Content-Security-Policy with `connect-src 'self'`, verified by automated tests).
+- The iOS app makes no network requests of its own (its web content is bundled; production builds carry a Content-Security-Policy with `connect-src 'self'`, verified by automated tests). The Privacy Policy and Support links open in Safari only when the user taps them.
 - No third-party SDKs (no analytics, ads, crash reporting, attribution).
 - Face ID / Touch ID results are evaluated by iOS (LocalAuthentication); the app receives only success/failure.
 - Files the user exports leave the app only through the iOS share sheet, by the user's choice.
