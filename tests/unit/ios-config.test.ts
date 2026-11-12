@@ -44,7 +44,11 @@ describe('iOS app configuration', () => {
     expect(png[25]).toBe(2); // IHDR colour type 2 = RGB (6 would be RGBA)
   });
 
-  it('native plugin is registered and the storyboard uses the Daybook view controller', () => {
+  it('native plugin is registered: the scene and the storyboard both use the Daybook view controller', () => {
+    // Capacitor 8 builds the root view controller in SceneDelegate, not from the storyboard
+    const scene = readFileSync('ios/App/App/SceneDelegate.swift', 'utf8');
+    expect(scene).toContain('rootViewController = DaybookViewController()');
+    expect(scene).not.toMatch(/rootViewController = CAPBridgeViewController\(\)/);
     expect(readFileSync('ios/App/App/Base.lproj/Main.storyboard', 'utf8')).toContain('customClass="DaybookViewController"');
     expect(readFileSync('ios/App/App/DaybookViewController.swift', 'utf8')).toContain('registerPluginInstance(DaybookNativePlugin())');
     expect(pbx).toContain('DaybookNativePlugin.swift in Sources');

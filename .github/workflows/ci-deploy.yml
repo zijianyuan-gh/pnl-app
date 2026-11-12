@@ -234,8 +234,8 @@ jobs:
           TEST_RUNNER_FACEID: '1'
         run: |
           set -o pipefail
-          # the Debug app writes this backup into its Documents folder (see DaybookViewController.seedForUITests)
-          export TEST_RUNNER_DEMO_JSON="$(node -e 'process.stdout.write(JSON.stringify(require("./build/demo/demo-backup.json")))')"
+          # the Debug app copies this backup into its Documents folder (see DaybookViewController.seedForUITests)
+          export TEST_RUNNER_DEMO_FILE="$PWD/build/demo/demo-backup.json"
           mkdir -p build/ci-output
           xcodebuild -project ios/App/App.xcodeproj -scheme App -destination "id=$UDID" -derivedDataPath build/dd \
             -resultBundlePath build/UITests.xcresult CODE_SIGNING_ALLOWED=NO test-without-building 2>&1 \
@@ -252,7 +252,7 @@ jobs:
           echo "--- app Documents after the tests:"; ls -la "$DATA/Documents" || true
           # app + web console log (Capacitor forwards console output in Debug builds)
           xcrun simctl spawn "$UDID" log show --last 30m --style compact --predicate 'process == "App"' > build/ci-output/app.log 2>&1 || true
-          grep -iE "error|exception|not implemented|DaybookNative" build/ci-output/app.log | tail -40 || true
+          grep -E "Daybook" build/ci-output/app.log | grep -v XC_kAX | tail -20 || true
       - name: Publish screenshots and logs to the ios-ci-output branch (main only)
         if: always() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         env:

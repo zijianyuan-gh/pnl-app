@@ -12,8 +12,8 @@ final class AppUITests: XCTestCase {
         continueAfterFailure = false
         app = XCUIApplication()
         app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
-        // Synthetic PWA backup (CI: TEST_RUNNER_DEMO_JSON); the Debug app writes it to Documents
-        if let seed = env["DEMO_JSON"] { app.launchEnvironment["DAYBOOK_UITEST_SEED_JSON"] = seed }
+        // Synthetic PWA backup (CI: TEST_RUNNER_DEMO_FILE); the Debug app copies it into Documents
+        if let seed = env["DEMO_FILE"] { app.launchEnvironment["DAYBOOK_UITEST_SEED_FILE"] = seed }
     }
 
     /// On any failure keep a screenshot and the accessibility tree (CI publishes them).

@@ -8,6 +8,7 @@ class DaybookViewController: CAPBridgeViewController {
 
     override func capacitorDidLoad() {
         bridge?.registerPluginInstance(DaybookNativePlugin())
+        NSLog("Daybook: native plugin registered")
         #if DEBUG
         seedForUITests()
         #endif
@@ -44,13 +45,18 @@ class DaybookViewController: CAPBridgeViewController {
     /// UI tests only (compiled out of Release/App Store builds): place a backup file in Documents
     /// exactly where a user's saved backup / the automatic copy would be. Never overwrites a file.
     private func seedForUITests() {
-        guard let json = ProcessInfo.processInfo.environment["DAYBOOK_UITEST_SEED_JSON"], !json.isEmpty,
+        guard let path = ProcessInfo.processInfo.environment["DAYBOOK_UITEST_SEED_FILE"], !path.isEmpty else { return }
+        guard let data = FileManager.default.contents(atPath: path),
               let docs = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-        else { return }
+        else {
+            NSLog("Daybook UITest seed: cannot read %@", path)
+            return
+        }
         for name in [DaybookNativePlugin.snapshotName, "Daybook PWA backup.json"] {
             let url = docs.appendingPathComponent(name)
             if !FileManager.default.fileExists(atPath: url.path) {
-                try? Data(json.utf8).write(to: url, options: .atomic)
+                try? data.write(to: url, options: .atomic)
+                NSLog("Daybook UITest seed: wrote %@ (%d bytes)", name, data.count)
             }
         }
     }
