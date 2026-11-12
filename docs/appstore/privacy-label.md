@@ -17,3 +17,9 @@ Other App Store Connect answers:
 - **Export compliance:** `ITSAppUsesNonExemptEncryption = NO` is set in Info.plist (the app uses only SHA-256 hashing for integrity checks and iOS's built-in protections), so no export documentation is needed.
 - **Tracking (App Tracking Transparency):** not used; the app does not track.
 - **Account deletion (5.1.1(v)):** not applicable — the app has no accounts. All data can be erased in the app (Accounts → Erase all data).
+
+## Privacy manifest (`ios/App/App/PrivacyInfo.xcprivacy`)
+Required for uploads since 2024 (otherwise App Store Connect rejects the build with ITMS-91053). It is bundled in the app (CI checks the Release archive) and matches the answers above:
+- `NSPrivacyTracking` = false, no tracking domains, no collected data types.
+- Required-reason APIs used by Daybook's own native code: **UserDefaults** — reason `CA92.1` (only remembers whether the App Lock privacy cover is on); **File timestamp** — reason `C617.1` (modification date of the automatic backup file in the app's own Documents folder).
+- Capacitor ships its own manifest inside its framework.

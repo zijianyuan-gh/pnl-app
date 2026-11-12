@@ -27,6 +27,13 @@ describe('iOS app configuration', () => {
     expect(capConfig).not.toMatch(/https?:\/\/(?!capacitorjs)/);
   });
 
+  it('keeps the web storage origin (capacitor://localhost) so an update never strands the IndexedDB data', () => {
+    // changing the scheme or hostname changes the origin; the app would start with an empty database
+    expect(capConfig).not.toMatch(/iosScheme|hostname|androidScheme/);
+    expect(capConfig).not.toMatch(/^\s*server\s*:/m);
+    expect(capConfig).toContain("appId: 'io.github.zijianyuangh.daybook'");
+  });
+
   it('bundle id, version and build are consistent', () => {
     const ids = [...pbx.matchAll(/PRODUCT_BUNDLE_IDENTIFIER = ([^;]+);/g)].map((m) => m[1]);
     expect(new Set(ids)).toEqual(new Set(['io.github.zijianyuangh.daybook', 'io.github.zijianyuangh.daybook.uitests']));

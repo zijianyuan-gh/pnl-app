@@ -103,6 +103,8 @@ public class DaybookNativePlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerD
             call.resolve(["cancelled": true])
             return
         }
+        // the picker hands us a private copy (asCopy): don't leave backups lying around in tmp
+        defer { try? FileManager.default.removeItem(at: url) }
         do {
             let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
             let size = (attrs[.size] as? NSNumber)?.intValue ?? 0
