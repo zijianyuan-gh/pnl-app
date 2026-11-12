@@ -18,7 +18,8 @@ class DaybookViewController: CAPBridgeViewController {
         nc.addObserver(self, selector: #selector(didBecomeActive), name: UIApplication.didBecomeActiveNotification, object: nil)
     }
 
-    override var preferredStatusBarStyle: UIStatusBarStyle { .lightContent }
+    // Status bar: light content on the dark UI, set in Info.plist (UIStatusBarStyle) because
+    // CAPBridgeViewController's preferredStatusBarStyle cannot be overridden from this module.
 
     /// With App Lock on, hide the content before iOS takes the app-switcher snapshot.
     @objc private func willResignActive() {

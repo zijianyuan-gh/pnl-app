@@ -174,11 +174,12 @@ public class DaybookNativePlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerD
             }
             let (text, modified) = read(Self.snapshotName)
             let (prev, prevModified) = read(Self.previousSnapshotName)
+            func orNull(_ v: Any?) -> Any { v ?? NSNull() }
             call.resolve([
-                "text": text ?? NSNull(),
-                "modifiedAt": modified ?? NSNull(),
-                "previousText": prev ?? NSNull(),
-                "previousModifiedAt": prevModified ?? NSNull(),
+                "text": orNull(text),
+                "modifiedAt": orNull(modified),
+                "previousText": orNull(prev),
+                "previousModifiedAt": orNull(prevModified),
             ])
         } catch {
             call.resolve(["text": NSNull(), "modifiedAt": NSNull(), "previousText": NSNull(), "previousModifiedAt": NSNull()])
@@ -213,13 +214,14 @@ public class DaybookNativePlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerD
             if success {
                 call.resolve(["success": true])
             } else {
-                let code = (error as? LAError)?.code
-                let name: String
-                switch code {
-                case .userCancel, .systemCancel, .appCancel: name = "cancelled"
-                case .passcodeNotSet: name = "passcode_not_set"
-                case .biometryLockout: name = "lockout"
-                default: name = "failed"
+                var name = "failed"
+                if let code = (error as? LAError)?.code {
+                    switch code {
+                    case .userCancel, .systemCancel, .appCancel: name = "cancelled"
+                    case .passcodeNotSet: name = "passcode_not_set"
+                    case .biometryLockout: name = "lockout"
+                    default: name = "failed"
+                    }
                 }
                 call.resolve(["success": false, "error": name])
             }

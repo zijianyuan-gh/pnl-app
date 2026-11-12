@@ -54,6 +54,9 @@ end
 tests.build_configurations.each do |c|
   s = c.build_settings
   s['TEST_TARGET_NAME'] = 'App'
+  s['PRODUCT_NAME'] = '$(TARGET_NAME)'
+  s['LD_RUNPATH_SEARCH_PATHS'] = ['$(inherited)', '@executable_path/Frameworks', '@loader_path/Frameworks']
+  s['SWIFT_EMIT_LOC_STRINGS'] = 'NO'
   s['PRODUCT_BUNDLE_IDENTIFIER'] = "#{BUNDLE_ID}.uitests"
   s['GENERATE_INFOPLIST_FILE'] = 'YES'
   s['SWIFT_VERSION'] = '5.0'

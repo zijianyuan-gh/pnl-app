@@ -183,7 +183,7 @@ jobs:
           echo "### Mac app: https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/Daybook-mac.zip" >> "$GITHUB_STEP_SUMMARY"
 
   ios:
-    needs: test
+    # builds and tests only (publishes nothing), so it runs in parallel with "test"
     runs-on: macos-latest
     timeout-minutes: 60
     env:
