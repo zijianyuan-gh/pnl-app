@@ -37,6 +37,19 @@ final class AppUITests: XCTestCase {
     private var web: XCUIElement { app.webViews.firstMatch }
     private func button(_ label: String) -> XCUIElement { web.buttons[label].firstMatch }
     private func text(_ label: String) -> XCUIElement { web.staticTexts[label].firstMatch }
+    /// Any element with this exact label (WKWebView exposes role="radio" etc. as generic elements).
+    private func control(_ label: String) -> XCUIElement {
+        web.descendants(matching: .any).matching(NSPredicate(format: "label == %@ AND elementType != %@", label, NSNumber(value: XCUIElement.ElementType.staticText.rawValue))).firstMatch
+    }
+    private var amountField: XCUIElement { web.textFields["Net realized P&L"].firstMatch }
+    private func hasKeyboardFocus(_ e: XCUIElement) -> Bool { (e.value(forKey: "hasKeyboardFocus") as? Bool) ?? false }
+
+    /// Types into the amount field, focusing it first if needed.
+    private func typeAmount(_ s: String) {
+        let field = wait(amountField)
+        if !hasKeyboardFocus(field) { field.tap() }
+        field.typeText(s)
+    }
     private func textContaining(_ s: String) -> XCUIElement {
         web.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", s)).firstMatch
     }
@@ -106,10 +119,13 @@ final class AppUITests: XCTestCase {
         shot("en-1-calendar")
 
         button("Add").tap()
-        // the amount field is focused and the decimal keypad is up right away (keyboard priming)
-        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10), "keyboard did not appear")
-        app.typeText("128.40")
-        web.radioButtons["Loss"].firstMatch.tap()
+        // keyboard priming: the amount field has keyboard focus right after tapping +, no extra tap
+        let field = wait(amountField)
+        let focused = NSPredicate(format: "hasKeyboardFocus == true")
+        expectation(for: focused, evaluatedWith: field)
+        waitForExpectations(timeout: 10)
+        field.typeText("128.40")
+        control("Loss").tap()
         Thread.sleep(forTimeInterval: 0.8)
         shot("en-2-quick-add")
         button("Cancel").tap()
@@ -123,14 +139,14 @@ final class AppUITests: XCTestCase {
         tab("Accounts"); shot("en-5-accounts")
 
         // Chinese UI
-        let zh = web.radioButtons["中文"].firstMatch
+        let zh = control("中文")
         reveal(zh)
         zh.tap()
         wait(button("日历"))
         tab("日历"); shot("zh-1-calendar")
         tab("统计"); shot("zh-4-analytics")
         tab("账户")
-        let en = web.radioButtons["EN"].firstMatch
+        let en = control("EN")
         reveal(en)
         en.tap()
         wait(button("Calendar"))
@@ -147,8 +163,7 @@ final class AppUITests: XCTestCase {
 
         button("Add").tap()
         if button("Discard").waitForExistence(timeout: 2) { button("Discard").tap() }
-        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10), "keyboard did not appear")
-        app.typeText("1234.56")
+        typeAmount("1234.56")
         wait(textContaining("+$1,234.56"))
         button("Save").tap()
         wait(textContaining("Saved +$1,234.56"), 10)
@@ -187,8 +202,16 @@ final class AppUITests: XCTestCase {
         wait(web.buttons.matching(NSPredicate(format: "label == %@", "Restore from backup")).firstMatch).tap()
 
         // System Files picker: Browse → On My iPhone → Daybook → the PWA backup
+        Thread.sleep(forTimeInterval: 2)
+        shot("picker-1-opened")
+        let pickerTree = XCTAttachment(string: String(app.debugDescription.prefix(150_000)))
+        pickerTree.name = "picker-tree"
+        pickerTree.lifetime = .keepAlways
+        add(pickerTree)
         let browse = app.buttons["Browse"].firstMatch
         if browse.waitForExistence(timeout: 10) { browse.tap() }
+        Thread.sleep(forTimeInterval: 1)
+        shot("picker-2-browse")
         let onMyIPhone = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "On My iPhone")).firstMatch
         if onMyIPhone.waitForExistence(timeout: 5) { onMyIPhone.tap() }
         let folder = app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", "Daybook")).firstMatch
@@ -200,7 +223,7 @@ final class AppUITests: XCTestCase {
         file.tap()
 
         wait(textContaining("Checksum verified (SHA-256)"), 15)
-        web.radioButtons.matching(NSPredicate(format: "label BEGINSWITH %@", "Merge into current data")).firstMatch.tap()
+        web.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", "Merge into current data")).firstMatch.tap()
         web.buttons["Merge into current data"].firstMatch.tap()
         // everything in the file is already here → nothing added, nothing duplicated
         wait(textContaining("Merged: 0 added · 0 updated · 0 deleted"), 10)
