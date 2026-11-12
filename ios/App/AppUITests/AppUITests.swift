@@ -328,16 +328,19 @@ final class AppUITests: XCTestCase {
         XCTAssertFalse(isOn(), "App Lock turned on without authentication")
         XCTAssertTrue(matchFaceID(until: isOn), "App Lock did not turn on after Face ID")
 
-        // Leave and come back: locked, and it stays locked until Face ID matches
-        XCUIDevice.shared.press(.home)
-        Thread.sleep(forTimeInterval: 1.5)
-        app.activate()
+        // Leave and come back (3 times, right after the previous unlock — the timing that once
+        // slipped through): locked every time, and it stays locked until Face ID matches
         let locked = textContaining("Daybook is locked")
-        XCTAssertTrue(locked.waitForExistence(timeout: 10), "lock screen did not appear")
-        Thread.sleep(forTimeInterval: 3)
-        XCTAssertTrue(locked.exists, "unlocked without Face ID")
-        shot("lock-1-locked")
-        XCTAssertTrue(matchFaceID { !locked.exists }, "Face ID did not unlock")
+        for round in 1...3 {
+            XCUIDevice.shared.press(.home)
+            Thread.sleep(forTimeInterval: 1.5)
+            app.activate()
+            XCTAssertTrue(locked.waitForExistence(timeout: 10), "lock screen did not appear (round \(round))")
+            Thread.sleep(forTimeInterval: 3)
+            XCTAssertTrue(locked.exists, "unlocked without Face ID (round \(round))")
+            if round == 1 { shot("lock-1-locked") }
+            XCTAssertTrue(matchFaceID { !locked.exists }, "Face ID did not unlock (round \(round))")
+        }
         wait(button("Calendar"))
 
         // Relaunch: locked again until authenticated
