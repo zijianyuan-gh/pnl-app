@@ -247,30 +247,42 @@ final class AppUITests: XCTestCase {
     }
 
     /// The Files picker is open: choose the file whose name contains `name` until `opened` appears.
-    private func pickFile(_ name: String, until opened: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
-        Thread.sleep(forTimeInterval: 2)
-        goToDaybookFolder()
-        let cell = app.cells.matching(NSPredicate(format: "label CONTAINS %@", name)).firstMatch
-        let found = cell.waitForExistence(timeout: 15)
-        shot("picker-\(name)")
-        if !found { attachTree("picker-tree-\(name)") }
-        XCTAssertTrue(found, "\(name) not shown in the Files picker", file: file, line: line)
-        // The picker runs in another process and can drop a tap (folder still settling, busy CI
-        // machine): let it settle, then try the cell, its icon and its name until the picker closes.
-        Thread.sleep(forTimeInterval: 1.5)
-        let taps: [() -> Void] = [
-            { cell.tap() },
-            { cell.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap() },
-            { cell.staticTexts.firstMatch.tap() },
-            { cell.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap() },
-            { cell.tap() },
-        ]
-        for tapIt in taps where cell.exists && !opened.exists {
-            if cell.isHittable { tapIt() }
-            _ = opened.waitForExistence(timeout: 5)
+    /// The picker is a separate system process; on a busy CI machine a freshly shown picker can
+    /// ignore every tap. Then do what a person would: Cancel, open it again (`reopen`), try again.
+    private func pickFile(_ name: String, reopen: () -> Void, until opened: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
+        for round in 0..<3 where !opened.exists {
+            if round > 0 {
+                attachTree("picker-tree-round\(round)-\(name)")
+                let bar = app.navigationBars["FullDocumentManagerViewControllerNavigationBar"]
+                let cancel = bar.exists ? bar.buttons["Cancel"].firstMatch : app.buttons["Cancel"].firstMatch
+                if cancel.exists { cancel.tap() }
+                Thread.sleep(forTimeInterval: 2)
+                reopen()
+            }
+            Thread.sleep(forTimeInterval: 2)
+            goToDaybookFolder()
+            let cell = app.cells.matching(NSPredicate(format: "label CONTAINS %@", name)).firstMatch
+            let found = cell.waitForExistence(timeout: 15)
+            if round == 0 { shot("picker-\(name)") }
+            guard found else { continue }
+            Thread.sleep(forTimeInterval: 1.5)
+            let taps: [() -> Void] = [
+                { cell.tap() },
+                { cell.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap() },
+                { cell.staticTexts.firstMatch.tap() },
+            ]
+            for tapIt in taps where cell.exists && !opened.exists {
+                if cell.isHittable { tapIt() }
+                _ = opened.waitForExistence(timeout: 5)
+            }
         }
-        if !opened.exists { attachTree("picker-tree-after-taps-\(name)") }
+        if !opened.exists { attachTree("picker-tree-failed-\(name)") }
         wait(opened, 15, file: file, line: line)
+    }
+
+    /// The restore sheet's own file button (the screen behind the sheet is hidden from VoiceOver).
+    private func tapRestoreFileButton() {
+        wait(web.buttons.matching(NSPredicate(format: "label == %@", "Restore from backup")).firstMatch).tap()
     }
 
     private func openRestorePicker() {
@@ -278,8 +290,7 @@ final class AppUITests: XCTestCase {
         let row = button("Restore from backup")
         reveal(row)
         row.tap()
-        // the sheet's file button has the same label; the screen behind the sheet is hidden from VoiceOver
-        wait(web.buttons.matching(NSPredicate(format: "label == %@", "Restore from backup")).firstMatch).tap()
+        tapRestoreFileButton()
     }
 
     /// Restore sheet with a verified file: choose "Merge" (its label also carries the help text) and run it.
@@ -408,7 +419,7 @@ final class AppUITests: XCTestCase {
         tab("Accounts")
         let before = dataSummary()
         openRestorePicker()
-        pickFile("PWA backup", until: textContaining("Checksum verified (SHA-256)"))
+        pickFile("PWA backup", reopen: tapRestoreFileButton, until: textContaining("Checksum verified (SHA-256)"))
         shot("restore-1-verified")
         mergeRestore()
         // everything in the file is already here → nothing added, nothing duplicated
@@ -498,7 +509,7 @@ final class AppUITests: XCTestCase {
 
         // the saved file is in Files → On My iPhone → Daybook and passes the checksum
         openRestorePicker()
-        pickFile("daybook-backup-", until: textContaining("Checksum verified (SHA-256)"))
+        pickFile("daybook-backup-", reopen: tapRestoreFileButton, until: textContaining("Checksum verified (SHA-256)"))
         mergeRestore()
         wait(textContaining("Merged: 0 added · 0 updated · 0 deleted"), 10)
         XCTAssertEqual(dataSummary(), before)
@@ -511,7 +522,7 @@ final class AppUITests: XCTestCase {
         tab("Accounts")
         let before = dataSummary()
         openRestorePicker()
-        pickFile("tampered", until: textContaining("Nothing was restored"))
+        pickFile("tampered", reopen: tapRestoreFileButton, until: textContaining("Nothing was restored"))
         shot("restore-2-tampered-refused")
         XCTAssertFalse(web.buttons["Merge into current data"].exists, "a refused file can still be restored")
         XCTAssertFalse(web.buttons["Replace all current data"].exists, "a refused file can still be restored")
@@ -535,7 +546,7 @@ final class AppUITests: XCTestCase {
         row.tap()
         wait(button("Choose a CSV file")).tap()
         let run = web.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Import (")).firstMatch
-        pickFile("Daybook import", until: run)
+        pickFile("Daybook import", reopen: { self.wait(self.button("Choose a CSV file")).tap() }, until: run)
         shot("csv-1-preview")
         XCTAssertEqual(run.label, "Import (2)")
         run.tap()
