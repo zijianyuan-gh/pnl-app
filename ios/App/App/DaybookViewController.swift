@@ -88,7 +88,8 @@ class DaybookViewController: CAPBridgeViewController {
                 NSLog("Daybook UITest seed: cannot read %@", item.source)
                 continue
             }
-            try? data.write(to: target, options: .atomic)
+            // the same way the app writes its automatic backup (coordinated, visible to Files)
+            try? DaybookNativePlugin.coordinatedWrite(data, to: target)
             NSLog("Daybook UITest seed: wrote %@ (%d bytes)", item.name, data.count)
         }
     }

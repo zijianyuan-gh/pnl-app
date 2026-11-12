@@ -80,6 +80,16 @@ describe('iOS app configuration', () => {
     expect(swift).not.toMatch(/systemUptime|mach_absolute_time|volumeAvailableCapacity|systemFreeSize|activeInputModes/);
   });
 
+  it('files the app writes into Documents go through NSFileCoordinator (Files / picker can open them)', () => {
+    const plugin = readFileSync('ios/App/App/DaybookNativePlugin.swift', 'utf8');
+    expect(plugin).toContain('NSFileCoordinator(filePresenter: nil).coordinate(writingItemAt:');
+    const write = plugin.slice(plugin.indexOf('func writeSnapshot'), plugin.indexOf('func readSnapshot'));
+    expect(write).toContain('coordinatedWrite(data, to: current)');
+    expect(write).not.toMatch(/data\.write\(to: current/);
+    // the previous-day copy keeps its original date (recovery skips copies older than an erase)
+    expect(write).toContain('setAttributes([.modificationDate: modified], ofItemAtPath: previous.path)');
+  });
+
   it('App Lock is triggered by iOS itself when the app goes to the background', () => {
     const vc = readFileSync('ios/App/App/DaybookViewController.swift', 'utf8');
     const plugin = readFileSync('ios/App/App/DaybookNativePlugin.swift', 'utf8');

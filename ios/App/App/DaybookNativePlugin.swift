@@ -139,6 +139,17 @@ public class DaybookNativePlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerD
         try FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
     }
 
+    /// Writes through NSFileCoordinator, so the Files app / document picker (other processes that
+    /// show this folder) are told about the new file and can open it right away.
+    static func coordinatedWrite(_ data: Data, to url: URL) throws {
+        var coordinationError: NSError?
+        var writeError: Error?
+        NSFileCoordinator(filePresenter: nil).coordinate(writingItemAt: url, options: .forReplacing, error: &coordinationError) { target in
+            do { try data.write(to: target, options: [.atomic]) } catch { writeError = error }
+        }
+        if let error = coordinationError ?? writeError { throw error }
+    }
+
     /// Atomically replaces the automatic backup file. Once per calendar day the previous file is
     /// kept as "(previous day)", so a bad day can never overwrite the only good copy.
     @objc func writeSnapshot(_ call: CAPPluginCall) {
@@ -153,12 +164,14 @@ public class DaybookNativePlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerD
             let fm = FileManager.default
             if let attrs = try? fm.attributesOfItem(atPath: current.path),
                let modified = attrs[.modificationDate] as? Date,
-               !Calendar.current.isDateInToday(modified) {
-                try? fm.removeItem(at: previous)
-                try fm.copyItem(at: current, to: previous)
+               !Calendar.current.isDateInToday(modified),
+               let old = fm.contents(atPath: current.path) {
+                try Self.coordinatedWrite(old, to: previous)
+                // keep the copy's own date: recovery never offers copies made before "Erase all data"
+                try? fm.setAttributes([.modificationDate: modified], ofItemAtPath: previous.path)
             }
             let data = Data(text.utf8)
-            try data.write(to: current, options: [.atomic])
+            try Self.coordinatedWrite(data, to: current)
             call.resolve(["bytes": data.count])
         } catch {
             call.reject("Could not write the automatic backup: \(error.localizedDescription)")
