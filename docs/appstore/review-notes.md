@@ -1,6 +1,6 @@
 # App Review Information — Notes for the reviewer
 
-Paste into App Store Connect → App Review Information → Notes. No demo account is needed.
+Paste the text between the lines into App Store Connect → App Review Information → Notes, unchanged. No demo account is needed (leave "Sign-in required" off). The reviewer contact (name, phone, e-mail) goes in the separate *Contact Information* fields of the same page, from your developer account — it is not part of these notes.
 
 ---
 
@@ -22,4 +22,4 @@ Native iOS functionality (Guideline 4.2): works fully offline from first launch;
 
 Permissions: Face ID usage description only (for the optional App Lock). No camera, photos, location, contacts, tracking or notifications.
 
-Contact for review questions: <your email or phone>
+---

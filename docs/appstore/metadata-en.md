@@ -13,7 +13,7 @@
 | Support URL | https://zijianyuan-gh.github.io/pnl-app/support.html |
 | Marketing URL (optional) | https://zijianyuan-gh.github.io/pnl-app/ |
 | Privacy Policy URL | https://zijianyuan-gh.github.io/pnl-app/privacy.html |
-| Copyright | `2026 <your legal name>` |
+| Copyright | `2026` followed by the name shown as *Seller* in your Apple Developer account (App Store Connect field; account information, not app content) |
 
 **Keywords (≤100):**
 ```

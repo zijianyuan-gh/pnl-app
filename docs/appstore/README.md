@@ -30,7 +30,8 @@ The Bundle ID can still be changed before the first upload (edit `scripts/ios-pr
 | Screenshots 6.9" (1320 × 2868), EN + 简体中文 | ✅ `screenshots/` |
 | iPhone app also runs on iPad (compatibility mode, Guideline 2.4.1) | ✅ CI launches it on an iPad simulator |
 | Signing team, App Store Connect record, upload, TestFlight, review | ⏳ needs your Apple Developer membership |
-| Your contact for App Review, copyright holder name | ⏳ fill in when submitting |
+
+**Account information only you can enter** (App Store Connect fields, deliberately not stored in this public repository): your signing *Team* in Xcode; *Copyright* = `2026` + your Seller name; *App Review → Contact Information* (name, phone, e-mail); price / availability. Everything else is paste-ready in this folder.
 
 ## What the owner has to do (once)
 
