@@ -57,6 +57,22 @@ describe('iOS app configuration', () => {
     expect(pbx).toContain('AppUITests.swift in Sources');
   });
 
+  it('privacy manifest declares the required-reason APIs the native code uses, and ships in the app', () => {
+    const manifest = readFileSync('ios/App/App/PrivacyInfo.xcprivacy', 'utf8');
+    expect(manifest).toMatch(/<key>NSPrivacyTracking<\/key>\s*<false\/>/);
+    expect(manifest).toMatch(/<key>NSPrivacyCollectedDataTypes<\/key>\s*<array\/>/);
+    expect(manifest).toContain('NSPrivacyAccessedAPICategoryUserDefaults');
+    expect(manifest).toContain('CA92.1');
+    expect(manifest).toContain('NSPrivacyAccessedAPICategoryFileTimestamp');
+    expect(manifest).toContain('C617.1');
+    expect(pbx).toContain('PrivacyInfo.xcprivacy in Resources');
+    // every required-reason API in the app's Swift code must be declared above
+    const swift = ['DaybookNativePlugin.swift', 'DaybookViewController.swift', 'AppDelegate.swift', 'SceneDelegate.swift']
+      .map((f) => readFileSync(`ios/App/App/${f}`, 'utf8'))
+      .join('\n');
+    expect(swift).not.toMatch(/systemUptime|mach_absolute_time|volumeAvailableCapacity|systemFreeSize|activeInputModes/);
+  });
+
   it('App Lock is triggered by iOS itself when the app goes to the background', () => {
     const vc = readFileSync('ios/App/App/DaybookViewController.swift', 'utf8');
     const plugin = readFileSync('ios/App/App/DaybookNativePlugin.swift', 'utf8');

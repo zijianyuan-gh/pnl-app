@@ -21,6 +21,7 @@
 		859903336D5DAA2575E7A8F5 /* AppUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 950B9CD85E58EDF23161D5DB /* AppUITests.swift */; };
 		9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9582B6822FE993A50072D4E8 /* SceneDelegate.swift */; };
 		BCE4369321DCEFCB14A10B4C /* DaybookNativePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B1A6BFAD1A27924447ECB73 /* DaybookNativePlugin.swift */; };
+		D7114B76043769BD41937F3F /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 834A6A5D3097D335C4CB2A6C /* PrivacyInfo.xcprivacy */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -44,6 +45,7 @@
 		504EC3111FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		504EC3131FED79650016851F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		50B271D01FEDC1A000F3C39B /* public */ = {isa = PBXFileReference; lastKnownFileType = folder; path = public; sourceTree = "<group>"; };
+		834A6A5D3097D335C4CB2A6C /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		8B1A6BFAD1A27924447ECB73 /* DaybookNativePlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DaybookNativePlugin.swift; sourceTree = "<group>"; };
 		950B9CD85E58EDF23161D5DB /* AppUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppUITests.swift; sourceTree = "<group>"; };
 		9582B6822FE993A50072D4E8 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
@@ -118,6 +120,7 @@
 				8B1A6BFAD1A27924447ECB73 /* DaybookNativePlugin.swift */,
 				97AE13341873A56A283780B4 /* DaybookViewController.swift */,
 				242F2F483232E1C752EB7BFB /* InfoPlist.strings */,
+				834A6A5D3097D335C4CB2A6C /* PrivacyInfo.xcprivacy */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -230,6 +233,7 @@
 				504EC30D1FED79650016851F /* Main.storyboard in Resources */,
 				2FAD9763203C412B000D30F8 /* config.xml in Resources */,
 				3C43A9E6E1AA95118693AF37 /* InfoPlist.strings in Resources */,
+				D7114B76043769BD41937F3F /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

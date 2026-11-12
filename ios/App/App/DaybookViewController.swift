@@ -66,22 +66,30 @@ class DaybookViewController: CAPBridgeViewController {
     }
 
     #if DEBUG
-    /// UI tests only (compiled out of Release/App Store builds): place a backup file in Documents
-    /// exactly where a user's saved backup / the automatic copy would be. Never overwrites a file.
+    /// UI tests only (compiled out of Release/App Store builds): place files in Documents exactly
+    /// where a user's saved backups / the automatic copy would be. Never overwrites a file.
+    /// DAYBOOK_UITEST_SEED_FILE: a backup, saved as the automatic copy and as "Daybook PWA backup.json".
+    /// DAYBOOK_UITEST_SEED_DIR: every file in it, under its own name (tampered backup, CSV).
     private func seedForUITests() {
-        guard let path = ProcessInfo.processInfo.environment["DAYBOOK_UITEST_SEED_FILE"], !path.isEmpty else { return }
-        guard let data = FileManager.default.contents(atPath: path),
-              let docs = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
-        else {
-            NSLog("Daybook UITest seed: cannot read %@", path)
-            return
+        let env = ProcessInfo.processInfo.environment
+        guard let docs = try? FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true) else { return }
+        var items: [(source: String, name: String)] = []
+        if let file = env["DAYBOOK_UITEST_SEED_FILE"], !file.isEmpty {
+            items += [(file, DaybookNativePlugin.snapshotName), (file, "Daybook PWA backup.json")]
         }
-        for name in [DaybookNativePlugin.snapshotName, "Daybook PWA backup.json"] {
-            let url = docs.appendingPathComponent(name)
-            if !FileManager.default.fileExists(atPath: url.path) {
-                try? data.write(to: url, options: .atomic)
-                NSLog("Daybook UITest seed: wrote %@ (%d bytes)", name, data.count)
+        if let dir = env["DAYBOOK_UITEST_SEED_DIR"], !dir.isEmpty,
+           let names = try? FileManager.default.contentsOfDirectory(atPath: dir) {
+            items += names.map { ((dir as NSString).appendingPathComponent($0), $0) }
+        }
+        for item in items {
+            let target = docs.appendingPathComponent(item.name)
+            guard !FileManager.default.fileExists(atPath: target.path) else { continue }
+            guard let data = FileManager.default.contents(atPath: item.source) else {
+                NSLog("Daybook UITest seed: cannot read %@", item.source)
+                continue
             }
+            try? data.write(to: target, options: .atomic)
+            NSLog("Daybook UITest seed: wrote %@ (%d bytes)", item.name, data.count)
         }
     }
     #endif

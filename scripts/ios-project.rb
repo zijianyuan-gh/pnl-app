@@ -21,6 +21,10 @@ end
 ensure_file(group, app, 'DaybookNativePlugin.swift')
 ensure_file(group, app, 'DaybookViewController.swift')
 
+# Privacy manifest (required-reason APIs: UserDefaults, file timestamps) — copied into the app bundle
+privacy = group.files.find { |f| f.path == 'PrivacyInfo.xcprivacy' } || group.new_reference('PrivacyInfo.xcprivacy')
+app.resources_build_phase.add_file_reference(privacy, true)
+
 # InfoPlist.strings (en, zh-Hans)
 unless group.children.any? { |c| c.display_name == 'InfoPlist.strings' }
   vg = group.new_variant_group('InfoPlist.strings')

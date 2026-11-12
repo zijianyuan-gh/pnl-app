@@ -1,6 +1,7 @@
 // Writes a SYNTHETIC Daybook backup (format 2, SHA-256) for screenshots and native tests:
 //   node scripts/make-demo-backup.mjs <outDir>
-// → <outDir>/demo-backup.json and <outDir>/expected.json (balance etc. for assertions).
+// → <outDir>/demo-backup.json and <outDir>/expected.json (balance etc. for assertions),
+//   <outDir>/files/: a tampered copy (must be refused) and a small CSV (import test) for the iOS tests.
 // Dates are relative to today so the calendar always has data in the current month.
 // Never contains real financial data.
 import { createHash } from 'node:crypto';
@@ -67,6 +68,17 @@ const body = {
 };
 const file = { ...body, integrity: { algorithm: 'SHA-256', scheme: 'daybook-canonical-json-v1', digest: createHash('sha256').update(canonicalJSON(body), 'utf8').digest('hex') } };
 writeFileSync(join(out, 'demo-backup.json'), JSON.stringify(file, null, 2));
+
+// Native tests: a copy edited after export (the SHA-256 no longer matches → the app must refuse it)
+// and a two-row CSV for the import test
+mkdirSync(join(out, 'files'), { recursive: true });
+const tampered = structuredClone(file);
+tampered.data.trades[0].notes = 'edited after export';
+writeFileSync(join(out, 'files', 'Daybook tampered backup.json'), JSON.stringify(tampered, null, 2));
+writeFileSync(
+  join(out, 'files', 'Daybook import.csv'),
+  ['date,account,pnl,symbol,notes', `${iso(today)},Stocks,77.77,CSVTEST,csv import test`, `${iso(today)},Stocks,-11.11,CSVTEST,csv import test`, ''].join('\n'),
+);
 
 const balanceCents = accounts.reduce((s, a) => s + a.startingBalanceCents, 0) + 5_000_00 + netPnlCents;
 const fmt = (c) => `${c < 0 ? '−' : ''}$${Math.floor(Math.abs(c) / 100).toLocaleString('en-US')}.${String(Math.abs(c) % 100).padStart(2, '0')}`;

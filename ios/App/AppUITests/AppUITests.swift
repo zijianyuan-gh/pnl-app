@@ -14,6 +14,8 @@ final class AppUITests: XCTestCase {
         app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         // Synthetic PWA backup (CI: TEST_RUNNER_DEMO_FILE); the Debug app copies it into Documents
         if let seed = env["DEMO_FILE"] { app.launchEnvironment["DAYBOOK_UITEST_SEED_FILE"] = seed }
+        // more files for Documents: a tampered backup and a CSV (CI: TEST_RUNNER_DEMO_DIR)
+        if let dir = env["DEMO_DIR"] { app.launchEnvironment["DAYBOOK_UITEST_SEED_DIR"] = dir }
     }
 
     /// On any failure keep a screenshot and the accessibility tree (CI publishes them).
@@ -166,6 +168,62 @@ final class AppUITests: XCTestCase {
         add(a)
     }
 
+    private func attachTree(_ name: String) {
+        let a = XCTAttachment(string: String(app.debugDescription.prefix(150_000)))
+        a.name = name
+        a.lifetime = .keepAlways
+        add(a)
+    }
+
+    /// Counts shown under "Last backup" in Accounts, e.g. "3 accounts · 121 trades · 1 transfer".
+    private func dataSummary() -> String { wait(textContaining("accounts · ")).label }
+
+    /// In a system Files sheet (picker or "Save to Files"): Browse → On My iPhone → Daybook folder.
+    private func goToDaybookFolder() {
+        let browse = app.buttons["Browse"].firstMatch
+        if browse.waitForExistence(timeout: 10) { browse.tap() }
+        Thread.sleep(forTimeInterval: 1)
+        let onMyIPhone = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "On My iPhone")).firstMatch
+        if onMyIPhone.waitForExistence(timeout: 5) { onMyIPhone.tap() }
+        // the app's own folder ("Daybook, Container") — never a file whose name starts with "Daybook"
+        let folder = app.cells.matching(NSPredicate(format: "label BEGINSWITH %@ AND identifier CONTAINS %@", "Daybook", "Container")).firstMatch
+        if folder.waitForExistence(timeout: 5) { folder.tap() }
+        Thread.sleep(forTimeInterval: 1)
+    }
+
+    /// The Files picker is open: choose the file whose name contains `name` until `opened` appears.
+    private func pickFile(_ name: String, until opened: XCUIElement, file: StaticString = #filePath, line: UInt = #line) {
+        Thread.sleep(forTimeInterval: 2)
+        goToDaybookFolder()
+        let cell = app.cells.matching(NSPredicate(format: "label CONTAINS %@", name)).firstMatch
+        let found = cell.waitForExistence(timeout: 15)
+        shot("picker-\(name)")
+        if !found { attachTree("picker-tree-\(name)") }
+        XCTAssertTrue(found, "\(name) not shown in the Files picker", file: file, line: line)
+        // a tap during the folder's push animation can be ignored: tap until the picker closes
+        for _ in 0..<4 where cell.exists && !opened.exists {
+            if cell.isHittable { cell.tap() }
+            _ = opened.waitForExistence(timeout: 4)
+        }
+        wait(opened, 15, file: file, line: line)
+    }
+
+    private func openRestorePicker() {
+        tab("Accounts")
+        let row = button("Restore from backup")
+        reveal(row)
+        row.tap()
+        // the sheet's file button has the same label; the screen behind the sheet is hidden from VoiceOver
+        wait(web.buttons.matching(NSPredicate(format: "label == %@", "Restore from backup")).firstMatch).tap()
+    }
+
+    /// Restore sheet with a verified file: choose "Merge" (its label also carries the help text) and run it.
+    private func mergeRestore() {
+        let option = web.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@ AND label != %@", "Merge into current data", "Merge into current data")).firstMatch
+        if option.exists { option.tap() }
+        web.buttons["Merge into current data"].firstMatch.tap()
+    }
+
     private func dismissSystemAlertIfPresent() {
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
         for label in ["OK", "Allow"] where springboard.buttons[label].waitForExistence(timeout: 2) {
@@ -243,9 +301,9 @@ final class AppUITests: XCTestCase {
         wait(row(containing: "Trade", "+$1,234.56"))
     }
 
-    // MARK: - 4. Export opens the system share sheet with "Save to Files"
+    // MARK: - 4. Export opens the system share sheet; cancelling records no backup; links open Safari
 
-    func test4_exportOpensShareSheet() throws {
+    func test4_exportShareSheetAndExternalLinks() throws {
         launchAndWait()
         tab("Accounts")
         let export = button("Export full backup (JSON)")
@@ -254,9 +312,21 @@ final class AppUITests: XCTestCase {
         let saveToFiles = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS[c] %@", "Save to Files")).firstMatch
         XCTAssertTrue(saveToFiles.waitForExistence(timeout: 15), "share sheet without Save to Files")
         shot("en-6-share-sheet")
-        // close without saving
+        // close without saving: not counted as a backup
         if app.buttons["Close"].exists { app.buttons["Close"].tap() } else { app.swipeDown(velocity: .fast) }
-        XCTAssertTrue(wait(button("Calendar")).exists)
+        wait(button("Calendar"))
+        XCTAssertTrue(text("Never").exists, "a cancelled export was recorded as a backup")
+
+        // About → Privacy Policy opens in Safari: the app itself never browses the web
+        let privacy = control("Privacy Policy")
+        reveal(privacy)
+        privacy.tap()
+        let safari = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")
+        XCTAssertTrue(safari.wait(for: .runningForeground, timeout: 20), "Privacy Policy did not open in Safari")
+        shot("link-1-safari")
+        app.activate()
+        wait(button("Accounts"))
+        XCTAssertTrue(control("Privacy Policy").exists, "the app navigated away from its own screen")
     }
 
     // MARK: - 5. Restore picks a backup from Files (no duplicates on merge)
@@ -264,52 +334,14 @@ final class AppUITests: XCTestCase {
     func test5_restorePicksBackupFromFiles() throws {
         launchAndWait()
         tab("Accounts")
-        let row = button("Restore from backup")
-        reveal(row)
-        row.tap()
-        // the sheet's file button has the same label; it is the only hittable one now
-        wait(web.buttons.matching(NSPredicate(format: "label == %@", "Restore from backup")).firstMatch).tap()
-
-        // System Files picker: Browse → On My iPhone → Daybook → the PWA backup
-        Thread.sleep(forTimeInterval: 2)
-        shot("picker-1-opened")
-        let pickerTree = XCTAttachment(string: String(app.debugDescription.prefix(150_000)))
-        pickerTree.name = "picker-tree"
-        pickerTree.lifetime = .keepAlways
-        add(pickerTree)
-        let browse = app.buttons["Browse"].firstMatch
-        if browse.waitForExistence(timeout: 10) { browse.tap() }
-        Thread.sleep(forTimeInterval: 1)
-        shot("picker-2-browse")
-        let onMyIPhone = app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "On My iPhone")).firstMatch
-        if onMyIPhone.waitForExistence(timeout: 5) { onMyIPhone.tap() }
-        // the app's own folder is a cell ("Daybook, Container"); don't hit other "Daybook" texts
-        let folder = app.cells.matching(NSPredicate(format: "label BEGINSWITH %@", "Daybook")).firstMatch
-        if folder.waitForExistence(timeout: 5) { folder.tap() }
-        let file = app.cells.matching(NSPredicate(format: "label CONTAINS %@", "PWA backup")).firstMatch
-        let found = file.waitForExistence(timeout: 15)
-        shot("picker-3-folder")
-        let folderTree = XCTAttachment(string: String(app.debugDescription.prefix(150_000)))
-        folderTree.name = "picker-tree-folder"
-        folderTree.lifetime = .keepAlways
-        add(folderTree)
-        guard found else {
-            throw XCTSkip("Could not navigate the system Files picker in this simulator; the picker opened but the file could not be selected by automation.")
-        }
-        // a tap during the folder's push animation can be ignored: tap until the picker closes
-        let verified = textContaining("Checksum verified (SHA-256)")
-        for _ in 0..<4 where file.exists && !verified.exists {
-            if file.isHittable { file.tap() }
-            _ = verified.waitForExistence(timeout: 4)
-        }
-        wait(verified, 15)
-        // choose "Merge" (the option's label also carries its help text), then run it
-        let mergeOption = web.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@ AND label != %@", "Merge into current data", "Merge into current data")).firstMatch
-        if mergeOption.exists { mergeOption.tap() }
+        let before = dataSummary()
+        openRestorePicker()
+        pickFile("PWA backup", until: textContaining("Checksum verified (SHA-256)"))
         shot("restore-1-verified")
-        web.buttons["Merge into current data"].firstMatch.tap()
+        mergeRestore()
         // everything in the file is already here → nothing added, nothing duplicated
         wait(textContaining("Merged: 0 added · 0 updated · 0 deleted"), 10)
+        XCTAssertEqual(dataSummary(), before)
     }
 
     // MARK: - 6. App Lock with Face ID (CI enrolls Face ID; a face "matches" only when the test asks)
@@ -364,5 +396,81 @@ final class AppUITests: XCTestCase {
         reveal(toggle)
         toggle.tap()
         XCTAssertTrue(matchFaceID { !isOn() }, "App Lock did not turn off")
+    }
+
+    // MARK: - 7. Export → "Save to Files" → the file is in Files and restores (round trip)
+
+    func test7_exportSavedToFilesRestores() throws {
+        launchAndWait()
+        tab("Accounts")
+        let before = dataSummary()
+        let export = button("Export full backup (JSON)")
+        reveal(export)
+        export.tap()
+        let saveToFiles = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS[c] %@", "Save to Files")).firstMatch
+        XCTAssertTrue(saveToFiles.waitForExistence(timeout: 15), "share sheet without Save to Files")
+        saveToFiles.tap()
+        Thread.sleep(forTimeInterval: 2)
+        shot("save-1-opened")
+        goToDaybookFolder()
+        // the Files sheet's own Save (outside the web view)
+        var save = app.navigationBars.buttons["Save"].firstMatch
+        if !save.waitForExistence(timeout: 10) { save = app.buttons.matching(NSPredicate(format: "label == %@", "Save")).firstMatch }
+        let canSave = save.waitForExistence(timeout: 5)
+        shot("save-2-folder")
+        if !canSave { attachTree("save-tree") }
+        XCTAssertTrue(canSave, "Save to Files: no Save button")
+        save.tap()
+        wait(textContaining("Backup exported"), 15)
+        XCTAssertFalse(text("Never").exists, "the completed export was not recorded as a backup")
+
+        // the saved file is in Files → On My iPhone → Daybook and passes the checksum
+        openRestorePicker()
+        pickFile("daybook-backup-", until: textContaining("Checksum verified (SHA-256)"))
+        mergeRestore()
+        wait(textContaining("Merged: 0 added · 0 updated · 0 deleted"), 10)
+        XCTAssertEqual(dataSummary(), before)
+    }
+
+    // MARK: - 8. A tampered backup is refused and nothing changes
+
+    func test8_tamperedBackupIsRefused() throws {
+        launchAndWait()
+        tab("Accounts")
+        let before = dataSummary()
+        openRestorePicker()
+        pickFile("tampered", until: textContaining("Nothing was restored"))
+        shot("restore-2-tampered-refused")
+        XCTAssertFalse(web.buttons["Merge into current data"].exists, "a refused file can still be restored")
+        XCTAssertFalse(web.buttons["Replace all current data"].exists, "a refused file can still be restored")
+        button("Close").tap()
+        XCTAssertEqual(dataSummary(), before)
+        // and still the same after a relaunch
+        app.terminate()
+        launchAndWait()
+        tab("Accounts")
+        XCTAssertEqual(dataSummary(), before)
+    }
+
+    // MARK: - 9. CSV import through the Files picker
+
+    func test9_csvImportThroughFilesPicker() throws {
+        launchAndWait()
+        tab("Accounts")
+        let before = dataSummary()
+        let row = button("Import CSV")
+        reveal(row)
+        row.tap()
+        wait(button("Choose a CSV file")).tap()
+        let run = web.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Import (")).firstMatch
+        pickFile("Daybook import", until: run)
+        shot("csv-1-preview")
+        XCTAssertEqual(run.label, "Import (2)")
+        run.tap()
+        wait(textContaining("Imported 2 trades"), 10)
+        XCTAssertNotEqual(dataSummary(), before)
+        tab("Calendar")
+        wait(self.row(containing: "CSVTEST", "+$77.77"))
+        wait(self.row(containing: "CSVTEST", "−$11.11"))
     }
 }

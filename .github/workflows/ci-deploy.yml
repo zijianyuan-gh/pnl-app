@@ -228,8 +228,14 @@ jobs:
       - name: Build app + UI tests (simulator)
         run: |
           set -o pipefail
+          mkdir -p build/ci-output
           xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug \
-            -destination "id=$UDID" -derivedDataPath build/dd CODE_SIGNING_ALLOWED=NO build-for-testing | tail -25
+            -destination "id=$UDID" -derivedDataPath build/dd CODE_SIGNING_ALLOWED=NO build-for-testing \
+            | tee build/xcodebuild-build.log | tail -25
+          # compiler warnings in Daybook's own Swift code (Capacitor's are not ours to fix)
+          grep -E "(ios/App/App|ios/App/AppUITests)/[A-Za-z]+\.swift:[0-9]+:[0-9]+: warning:" build/xcodebuild-build.log | sort -u \
+            | tee build/ci-output/app-warnings.txt || true
+          echo "Daybook Swift warnings: $(wc -l < build/ci-output/app-warnings.txt)"
       - name: Prepare a synthetic PWA backup for the tests
         run: |
           node scripts/make-demo-backup.mjs build/demo
@@ -261,11 +267,25 @@ jobs:
           set -o pipefail
           # the Debug app copies this backup into its Documents folder (see DaybookViewController.seedForUITests)
           export TEST_RUNNER_DEMO_FILE="$PWD/build/demo/demo-backup.json"
+          export TEST_RUNNER_DEMO_DIR="$PWD/build/demo/files"
           mkdir -p build/ci-output
           xcodebuild -project ios/App/App.xcodeproj -scheme App -destination "id=$UDID" -derivedDataPath build/dd \
             -resultBundlePath build/UITests.xcresult CODE_SIGNING_ALLOWED=NO test-without-building 2>&1 \
             | tee build/ci-output/xcodebuild-test.log \
             | grep -E "Test (Suite|Case)|error:|failed|passed|skipped|\*\* TEST" | tail -60
+      - name: The iPhone app also runs on iPad (compatibility mode, Guideline 2.4.1)
+        run: |
+          IPAD=$(xcrun simctl list devices available -j | python3 scripts/ios-pick-simulator.py --ipad)
+          xcrun simctl boot "$IPAD" || true
+          xcrun simctl bootstatus "$IPAD" -b
+          xcrun simctl install "$IPAD" build/dd/Build/Products/Debug-iphonesimulator/App.app
+          xcrun simctl launch "$IPAD" io.github.zijianyuangh.daybook
+          sleep 15
+          mkdir -p build/ci-output
+          xcrun simctl io "$IPAD" screenshot build/ci-output/ipad-compat.png
+          # still running 15 s after launch (no crash)
+          xcrun simctl spawn "$IPAD" launchctl list | grep "UIKitApplication:io.github.zijianyuangh.daybook"
+          xcrun simctl shutdown "$IPAD" || true
       - name: Export screenshots
         if: always()
         run: |
@@ -312,4 +332,14 @@ jobs:
           test -f "$APP/public/index.html"
           lipo -archs "$APP/App"
           /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' -c 'Print :CFBundleShortVersionString' -c 'Print :CFBundleVersion' "$APP/Info.plist"
-          echo "### iOS: simulator UI tests passed; unsigned Release archive built ($(du -sh "$APP" | cut -f1))" >> "$GITHUB_STEP_SUMMARY"
+          # App Store requirements visible in the built bundle
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconName' "$APP/Info.plist"
+          test -f "$APP/Assets.car"
+          plutil -lint "$APP/PrivacyInfo.xcprivacy"
+          plutil -p "$APP/PrivacyInfo.xcprivacy" | grep -q NSPrivacyAccessedAPICategoryUserDefaults
+          plutil -p "$APP/PrivacyInfo.xcprivacy" | grep -q NSPrivacyAccessedAPICategoryFileTimestamp
+          # test-only code and debugging stay out of the Release build
+          if strings "$APP/App" | grep -q DAYBOOK_UITEST_SEED_FILE; then echo "UI-test seed hook in Release binary"; exit 1; fi
+          if grep -Eq '"server"|"webContentsDebuggingEnabled": *true' "$APP/capacitor.config.json"; then echo "remote server or web inspector in Release config"; exit 1; fi
+          echo "release bundle checks passed"
+          echo "### iOS: simulator UI tests passed; unsigned Release archive built ($(du -sh "$APP" | cut -f1)), privacy manifest present" >> "$GITHUB_STEP_SUMMARY"
