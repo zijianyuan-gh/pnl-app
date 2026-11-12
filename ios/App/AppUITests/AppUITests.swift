@@ -323,6 +323,7 @@ final class AppUITests: XCTestCase {
         privacy.tap()
         let safari = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")
         XCTAssertTrue(safari.wait(for: .runningForeground, timeout: 20), "Privacy Policy did not open in Safari")
+        Thread.sleep(forTimeInterval: 3) // let the app switch finish before the screenshot
         shot("link-1-safari")
         app.activate()
         wait(button("Accounts"))
@@ -472,5 +473,23 @@ final class AppUITests: XCTestCase {
         tab("Calendar")
         wait(self.row(containing: "CSVTEST", "+$77.77"))
         wait(self.row(containing: "CSVTEST", "−$11.11"))
+    }
+
+    // MARK: - Z. After the app is installed again over itself (= an update), everything is still there
+
+    /// Run by CI in a second xcodebuild invocation, which reinstalls the app over the existing
+    /// installation (same as an App Store update: the app bundle is replaced, the data is kept).
+    func testZ_dataSurvivesReinstall() throws {
+        guard env["AFTER_REINSTALL"] == "1" else { throw XCTSkip("only after CI reinstalls the app") }
+        launchAndWait()
+        // the database was not empty → no recovery prompt
+        XCTAssertFalse(textContaining("Restore your data?").waitForExistence(timeout: 3), "data was lost on reinstall")
+        tab("Accounts")
+        // 120 restored + 1 recorded (test 3) + 2 imported from CSV (test 9)
+        XCTAssertEqual(dataSummary(), "3 accounts · 123 trades · 1 transfer")
+        shot("update-1-data-kept")
+        tab("Calendar")
+        wait(row(containing: "Trade", "+$1,234.56"))
+        wait(row(containing: "CSVTEST", "+$77.77"))
     }
 }
