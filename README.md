@@ -132,7 +132,7 @@ curl -fsSL https://raw.githubusercontent.com/zijianyuan-gh/pnl-app/main/mac/inst
 | 记录一笔交易，杀掉 App 重新启动后仍在 | ✅ test3 |
 | 导出完整备份打开系统分享面板，含「存储到“文件”」 | ✅ test4 |
 | 「从备份恢复」通过系统「文件」选择器选取文件 → SHA-256 校验 → 合并不产生重复 | ✅ test5（文件中 2 个备份可见；合并结果 0 新增 · 0 更新 · 0 删除） |
-| 面容 ID 应用锁：开启需认证；切到后台再回来、重新启动后都被锁定；无匹配时保持锁定；匹配后解锁；关闭也需认证 | ✅ test6（CI 用模拟面容 ID，仅在测试请求时匹配） |
+| 面容 ID 应用锁：开启需认证；切到后台再回来、重新启动后都被锁定；无匹配时保持锁定；匹配后解锁；关闭也需认证 | ✅ test6（连续 3 次后台/返回循环；CI 用模拟面容 ID，仅在测试请求时匹配） |
 | Release 真机架构归档（`generic/platform=iOS`，arm64，未签名） | ✅ `ARCHIVE SUCCEEDED`，arm64，`io.github.zijianyuangh.daybook` 1.2.0 (1) |
 
 **仅完成代码与配置（需要你的 Apple 开发者账号才能验证）**：代码签名、证书与描述文件、App Store Connect 记录、上传、TestFlight、App 审核。我没有申请任何证书，也没有上传或提交。
