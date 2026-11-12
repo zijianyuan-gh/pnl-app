@@ -299,7 +299,10 @@ final class AppUITests: XCTestCase {
         file.tap()
 
         wait(textContaining("Checksum verified (SHA-256)"), 15)
-        web.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", "Merge into current data")).firstMatch.tap()
+        // choose "Merge" (the option's label also carries its help text), then run it
+        let mergeOption = web.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@ AND label != %@", "Merge into current data", "Merge into current data")).firstMatch
+        if mergeOption.exists { mergeOption.tap() }
+        shot("restore-1-verified")
         web.buttons["Merge into current data"].firstMatch.tap()
         // everything in the file is already here → nothing added, nothing duplicated
         wait(textContaining("Merged: 0 added · 0 updated · 0 deleted"), 10)
@@ -345,8 +348,12 @@ final class AppUITests: XCTestCase {
         XCTAssertTrue(locked.exists, "unlocked without Face ID after relaunch")
         XCTAssertTrue(matchFaceID { !locked.exists }, "Face ID did not unlock after relaunch")
 
-        // Turn it off again (also needs Face ID)
-        tab("Accounts")
+        // Turn it off again (also needs Face ID). The first tap can land while the system Face ID
+        // sheet is still going away, so make sure the Accounts screen is really open.
+        wait(button("Calendar"))
+        Thread.sleep(forTimeInterval: 1)
+        for _ in 0..<3 where !button("New account").exists { tab("Accounts"); _ = button("New account").waitForExistence(timeout: 3) }
+        wait(button("New account"))
         reveal(toggle)
         toggle.tap()
         XCTAssertTrue(matchFaceID { !isOn() }, "App Lock did not turn off")
