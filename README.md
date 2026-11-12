@@ -14,7 +14,9 @@
 
 ---
 
-## 当前状态（v1.1）——已验证与未验证
+## 当前状态（v1.1 网页版）——已验证与未验证
+
+iOS App（v1.2）的验证状态见下方「iOS App 验证状态」。
 
 | 能力 | 状态 | 依据 |
 | --- | --- | --- |
@@ -116,6 +118,33 @@ curl -fsSL https://raw.githubusercontent.com/zijianyuan-gh/pnl-app/main/mac/inst
 - **数据保护**：App 存储为空且存在自动备份副本时提示恢复；从不用空数据库覆盖副本；「清空全部数据」之前的副本不会再被提示。
 - **标识**：Bundle ID `io.github.zijianyuangh.daybook`，版本 1.2.0（build 1），仅 iPhone，iOS 15+。`npm run ios:version` 递增 build 号。
 
+### iOS App 验证状态（如实区分）
+
+**已实际构建并自动化验证**（GitHub Actions `macos` 运行器，Xcode 26.6，iOS 26.5 模拟器 iPhone 17 Pro Max；每次推送都会重跑，结果截图与日志发布在 `ios-ci-output` 分支）：
+
+| 内容 | 结果 |
+| --- | --- |
+| 模拟器 Debug 构建（App + UI 测试） | ✅ 编译通过 |
+| 打包内容：`public/index.html` 存在、配置中没有远程 `server.url`、生产 CSP 存在 | ✅ |
+| 全新安装、App 为空时，提示从 App 的 Documents 中的备份恢复（CI 预置的是网页版格式的合成备份）：120 笔交易、余额一致，重启后仍在且不再提示 | ✅ test1 |
+| 中英文 App Store 截图（5 张 × 2 种语言，1320 × 2868） | ✅ test2 |
+| 点 + 后金额输入框立即获得键盘焦点；屏幕键盘弹出时金额与「保存」位于键盘之上 | ✅ test2（真实屏幕键盘） |
+| 记录一笔交易，杀掉 App 重新启动后仍在 | ✅ test3 |
+| 导出完整备份打开系统分享面板，含「存储到“文件”」 | ✅ test4 |
+| 「从备份恢复」通过系统「文件」选择器选取文件 → SHA-256 校验 → 合并不产生重复 | ✅ test5（文件中 2 个备份可见；合并结果 0 新增 · 0 更新 · 0 删除） |
+| 面容 ID 应用锁：开启需认证；切到后台再回来、重新启动后都被锁定；无匹配时保持锁定；匹配后解锁；关闭也需认证 | ✅ test6（CI 用模拟面容 ID，仅在测试请求时匹配） |
+| Release 真机架构归档（`generic/platform=iOS`，arm64，未签名） | ✅ `ARCHIVE SUCCEEDED`，arm64，`io.github.zijianyuangh.daybook` 1.2.0 (1) |
+
+**仅完成代码与配置（需要你的 Apple 开发者账号才能验证）**：代码签名、证书与描述文件、App Store Connect 记录、上传、TestFlight、App 审核。我没有申请任何证书，也没有上传或提交。
+
+**尚未在真机上验证**：真实 iPhone 上的面容 ID / 触控 ID、iCloud 云盘中的「文件」读写、App 切换器隐私遮罩的实际效果、真实设备性能与 VoiceOver。请用 TestFlight 或 Xcode 安装到自己的 iPhone 后按 `docs/iPhone安装与验收指南.md` 第 6 节走一遍。
+
+| 日历 | 快速记录（中文） | 统计 | 账户 |
+| --- | --- | --- | --- |
+| ![](docs/appstore/screenshots/en/1-calendar.png) | ![](docs/appstore/screenshots/zh-Hans/2-quick-add.png) | ![](docs/appstore/screenshots/en/4-analytics.png) | ![](docs/appstore/screenshots/en/5-accounts.png) |
+
+以上为 iOS App 在模拟器中由 UI 测试自动截取（合成演示数据）。
+
 常用命令（需要 macOS + Xcode）：
 
 ```bash
@@ -194,7 +223,7 @@ npm run typecheck && npm test && npm run e2e
 
 ## 已知限制
 
-- 未在真实 iPhone Safari / WebKit 上测试（见上方验收步骤）。
+- 未在真实 iPhone Safari / WebKit 上测试；iOS App 只在 iOS 模拟器中验证过，未在真机上运行（见上方验收步骤与 `docs/iPhone安装与验收指南.md` 第 6 节）。
 - 不跨设备同步（设计如此），只能通过备份文件迁移。
 - 仅 USD；仅记录已实现盈亏；仅深色主题；不支持 iOS 动态字体（Dynamic Type）缩放。
 - CSV 重复检测基于「账户 + 日期 + 净盈亏 + 标的」，同日同标的同金额的两笔真实交易会被标为疑似重复（可选择仍然导入）。
