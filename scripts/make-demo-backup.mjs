@@ -29,11 +29,12 @@ const start = new Date(today.getFullYear(), today.getMonth() - 3, 1);
 const accounts = [
   { id: 'demo-stocks', name: 'Stocks', startingBalanceCents: 25_000_00, color: '#4F8CFF' },
   { id: 'demo-futures', name: 'Futures', startingBalanceCents: 10_000_00, color: '#F5B544' },
-  { id: 'demo-kalshi', name: 'Kalshi', startingBalanceCents: 2_000_00, color: '#A78BFA' },
+  { id: 'demo-options', name: 'Options', startingBalanceCents: 2_000_00, color: '#A78BFA' },
 ].map((a, i) => ({ ...a, startDate: iso(start), archived: false, sortOrder: i, createdAt: now, updatedAt: now }));
 
-const symbols = { 'demo-stocks': ['AAPL', 'NVDA', 'TSLA', 'MSFT', 'AMD', 'SPY'], 'demo-futures': ['ES', 'NQ', 'CL'], 'demo-kalshi': ['FED-DEC', 'CPI-NOV', 'NFP'] };
-const platforms = { 'demo-stocks': 'IBKR', 'demo-futures': 'Tradovate', 'demo-kalshi': 'Kalshi' };
+const symbols = { 'demo-stocks': ['AAPL', 'NVDA', 'TSLA', 'MSFT', 'AMD', 'SPY'], 'demo-futures': ['ES', 'NQ', 'CL'], 'demo-options': ['SPY', 'QQQ', 'IWM'] };
+// no broker names: App Store screenshots must not suggest any affiliation (Guideline 5.2.1)
+const platforms = {};
 const tags = ['breakout', 'pullback', 'news', 'scalp', 'swing'];
 const trades = [];
 let n = 0;
@@ -42,12 +43,12 @@ for (let d = new Date(start); d <= today; d.setDate(d.getDate() + 1)) {
   const k = 1 + Math.floor(rnd() * 3);
   for (let i = 0; i < k; i++) {
     const acc = pick(accounts).id;
-    const scale = acc === 'demo-kalshi' ? 9_000 : acc === 'demo-futures' ? 60_000 : 45_000;
+    const scale = acc === 'demo-options' ? 9_000 : acc === 'demo-futures' ? 60_000 : 45_000;
     const pnl = Math.round((rnd() - 0.42) * scale);
     trades.push({
       id: `demo-t${++n}`, accountId: acc, date: iso(d), pnlCents: pnl,
       feesCents: rnd() < 0.5 ? (acc === 'demo-futures' ? 4_20 : 1_00) : null,
-      symbol: pick(symbols[acc]), platform: platforms[acc], tags: rnd() < 0.7 ? [pick(tags)] : [], notes: '',
+      symbol: pick(symbols[acc]), platform: platforms[acc] ?? '', tags: rnd() < 0.7 ? [pick(tags)] : [], notes: '',
       side: rnd() < 0.6 ? 'long' : 'short', quantity: null, entryPrice: null, exitPrice: null, entryTime: null, exitTime: null,
       createdAt: now + n, updatedAt: now + n,
     });

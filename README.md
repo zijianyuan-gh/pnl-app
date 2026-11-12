@@ -188,8 +188,9 @@ React 19 + TypeScript + Vite 8 + Tailwind CSS 4；IndexedDB（Dexie 4）；vite-
 npm run typecheck && npm test && npm run e2e
 ```
 
-- 单元测试 80 项：金额（含小数逗号与非法分组）、日期、统计、CSV、账务场景 A/B/C、SHA-256（对照 Node crypto）、逐字段篡改检测、v1.0 兼容、事务回滚、合并规则 R1–R6、双设备收敛、精度与余额边界、撤销冲突（恢复后新增/修改/删除交易、资金、账户及 CSV 导入后修改时，撤销被拒绝且数据不变）。
+- 单元测试 95 项：金额（含小数逗号与非法分组）、日期、统计、CSV、账务场景 A/B/C、SHA-256（对照 Node crypto）、逐字段篡改检测、v1.0 兼容、事务回滚、合并规则 R1–R6、双设备收敛、精度与余额边界、撤销冲突（恢复后新增/修改/删除交易、资金、账户及 CSV 导入后修改时，撤销被拒绝且数据不变）。
 - E2E（Chromium，iPhone 14 模拟 + 桌面）：账务、编辑删除撤销、备份恢复（含 v1.0 文件与撤销）、CSV 导入、时区、布局、PWA 离线与更新、**真实交易全生命周期验收**、iPhone 专项（分享面板手势、无分享面板时下载、键盘遮挡、安全区、草稿、小数逗号、主屏幕模式、axe 无障碍）、安全（同源、CSP、XSS）。
+- iOS 原生（XCUITest，在 GitHub Actions 的 macOS + iOS 模拟器中运行真实 App，`ios/App/AppUITests/AppUITests.swift`）：PWA 格式备份在全新安装的 App 中恢复并在重启后保留、App Store 截图（英文 + 中文）、Quick Add 打开即聚焦金额并位于屏幕键盘之上、记录交易后重启仍在、导出打开系统分享面板（含「存储到“文件”」）、「文件」选择器恢复、面容 ID 应用锁（无匹配时保持锁定）；另有 Release 版真机架构归档（未签名）。单元测试 `tests/unit/ios-config.test.ts` 检查权限只有面容 ID、不加载远程 URL、Bundle ID 与版本号一致、图标规格、插件注册。
 
 ## 已知限制
 
