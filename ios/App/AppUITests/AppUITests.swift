@@ -86,7 +86,19 @@ final class AppUITests: XCTestCase {
 
     private func launchAndWait() {
         app.launch()
-        wait(button("Calendar"), 30)
+        let calendar = button("Calendar"), locked = textContaining("Daybook is locked")
+        let end = Date().addingTimeInterval(30)
+        while Date() < end && !calendar.exists && !locked.exists { Thread.sleep(forTimeInterval: 0.5) }
+        // only if an earlier test failed with App Lock still on (that failure is reported there)
+        if locked.exists && env["FACEID"] == "1" { _ = matchFaceID { !locked.exists } }
+        wait(calendar, 30)
+    }
+
+    /// Back from the Home Screen. On a slow CI machine the first activation can be lost.
+    private func bringAppBack(file: StaticString = #filePath, line: UInt = #line) {
+        app.activate()
+        if !app.wait(for: .runningForeground, timeout: 15) { app.activate() }
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 15), "the app did not come back to the foreground", file: file, line: line)
     }
 
     private func tab(_ name: String) {
@@ -325,7 +337,7 @@ final class AppUITests: XCTestCase {
         XCTAssertTrue(safari.wait(for: .runningForeground, timeout: 20), "Privacy Policy did not open in Safari")
         Thread.sleep(forTimeInterval: 3) // let the app switch finish before the screenshot
         shot("link-1-safari")
-        app.activate()
+        bringAppBack()
         wait(button("Accounts"))
         XCTAssertTrue(control("Privacy Policy").exists, "the app navigated away from its own screen")
     }
@@ -371,7 +383,7 @@ final class AppUITests: XCTestCase {
         for round in 1...3 {
             XCUIDevice.shared.press(.home)
             Thread.sleep(forTimeInterval: 1.5)
-            app.activate()
+            bringAppBack()
             XCTAssertTrue(locked.waitForExistence(timeout: 10), "lock screen did not appear (round \(round))")
             Thread.sleep(forTimeInterval: 3)
             XCTAssertTrue(locked.exists, "unlocked without Face ID (round \(round))")

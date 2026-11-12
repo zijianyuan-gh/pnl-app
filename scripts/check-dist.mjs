@@ -29,7 +29,7 @@ const secretPatterns = [
   [/-----BEGIN [A-Z ]*PRIVATE KEY-----/, 'private key'],
   [/\bsk-[A-Za-z0-9_-]{20,}/, 'API secret key'],
   [/CLOUDFLARE_API_TOKEN|CLOUDFLARE_ACCOUNT_ID/, 'Cloudflare credential name'],
-  [/[A-Za-z0-9._%+-]+@(?:gmail|berkeley|outlook|icloud|yahoo|hotmail)\.[a-z.]+/i, 'personal e-mail address'],
+  [/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.(?:com|edu|org|net|io|me|cn)\b/i, 'e-mail address'],
 ];
 
 for (const f of files) {
