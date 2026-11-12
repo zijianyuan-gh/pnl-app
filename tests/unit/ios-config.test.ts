@@ -83,6 +83,11 @@ describe('iOS app configuration', () => {
   it('files the app writes into Documents go through NSFileCoordinator (Files / picker can open them)', () => {
     const plugin = readFileSync('ios/App/App/DaybookNativePlugin.swift', 'utf8');
     expect(plugin).toContain('NSFileCoordinator(filePresenter: nil).coordinate(writingItemAt:');
+    // staged outside Documents, then swapped/moved in: no temporary file ever appears in the folder Files indexes
+    const cw = plugin.slice(plugin.indexOf('static func coordinatedWrite'), plugin.indexOf('@objc func writeSnapshot'));
+    expect(cw).toContain('fm.temporaryDirectory');
+    expect(cw).toContain('replaceItemAt(target, withItemAt: staged)');
+    expect(cw).not.toMatch(/data\.write\(to: target/);
     const write = plugin.slice(plugin.indexOf('func writeSnapshot'), plugin.indexOf('func readSnapshot'));
     expect(write).toContain('coordinatedWrite(data, to: current)');
     expect(write).not.toMatch(/data\.write\(to: current/);
