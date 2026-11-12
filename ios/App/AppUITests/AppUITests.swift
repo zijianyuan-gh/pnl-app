@@ -127,9 +127,26 @@ final class AppUITests: XCTestCase {
         XCTAssertTrue(app.wait(for: .runningForeground, timeout: 15), "the app did not come back to the foreground", file: file, line: line)
     }
 
-    private func tab(_ name: String) {
-        button(name).tap()
-        Thread.sleep(forTimeInterval: 0.6)
+    private static let tabSets = [["Calendar", "Trades", "Analytics", "Accounts"], ["日历", "交易", "统计", "账户"]]
+
+    /// Opens a tab and waits until its screen is really shown: Trades / Analytics / Accounts show
+    /// their title (hidden screens are not in the accessibility tree); Calendar shows none of them.
+    /// A tap during a re-render can be lost, so it is retried; a screenshot never shows the wrong screen.
+    private func tab(_ name: String, file: StaticString = #filePath, line: UInt = #line) {
+        let set = Self.tabSets.first { $0.contains(name) } ?? [name]
+        let shown: () -> Bool = name == set[0]
+            ? { set.dropFirst().allSatisfy { !self.web.staticTexts[$0].exists } }
+            : { self.web.staticTexts[name].exists }
+        for _ in 0..<3 {
+            button(name).tap()
+            let end = Date().addingTimeInterval(4)
+            while !shown() && Date() < end { Thread.sleep(forTimeInterval: 0.25) }
+            if shown() {
+                Thread.sleep(forTimeInterval: 0.5)
+                return
+            }
+        }
+        XCTFail("tab \(name) did not open", file: file, line: line)
     }
 
     /// Scroll the current screen until the element can be tapped.

@@ -48,3 +48,12 @@ for test in json.loads((src / "manifest.json").read_text()):
 
 if copied == 0:
     sys.exit("no en-N-* / zh-N-* screenshots found")
+
+# two identical screenshots mean a screen did not change (wrong screen captured): never ship that
+import hashlib
+seen = {}
+for f in sorted(dst.glob("*/*.png")):
+    h = hashlib.sha256(f.read_bytes()).hexdigest()
+    if h in seen:
+        sys.exit(f"identical screenshots: {seen[h].relative_to(dst)} and {f.relative_to(dst)}")
+    seen[h] = f
