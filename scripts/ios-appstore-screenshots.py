@@ -29,7 +29,9 @@ def png_size(p: Path) -> tuple[int, int]:
     return struct.unpack(">II", head[16:24])
 
 
-copied = 0
+# collect first; refuse identical pictures (a screen that did not change) before writing anything
+import hashlib
+picked = []
 for test in json.loads((src / "manifest.json").read_text()):
     for a in test.get("attachments", []):
         m = re.match(r"^(en|zh)-([1-5])-([a-z-]+?)_\d+_", a["suggestedHumanReadableName"])
@@ -40,20 +42,17 @@ for test in json.loads((src / "manifest.json").read_text()):
         size = png_size(f)
         if size != want:
             sys.exit(f"{f.name}: {size[0]}x{size[1]}, expected {want[0]}x{want[1]}")
-        out = dst / folders[lang] / f"{n}-{name}.png"
-        out.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(f, out)
-        print(f"{out.relative_to(dst.parent.parent.parent)}  {size[0]}x{size[1]}")
-        copied += 1
+        picked.append((f, dst / folders[lang] / f"{n}-{name}.png", size))
 
-if copied == 0:
+if not picked:
     sys.exit("no en-N-* / zh-N-* screenshots found")
-
-# two identical screenshots mean a screen did not change (wrong screen captured): never ship that
-import hashlib
 seen = {}
-for f in sorted(dst.glob("*/*.png")):
+for f, out, _ in picked:
     h = hashlib.sha256(f.read_bytes()).hexdigest()
     if h in seen:
-        sys.exit(f"identical screenshots: {seen[h].relative_to(dst)} and {f.relative_to(dst)}")
-    seen[h] = f
+        sys.exit(f"identical screenshots: {seen[h].name} and {out.name} ({out.parent.name}) - nothing copied")
+    seen[h] = out
+for f, out, size in picked:
+    out.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(f, out)
+    print(f"{out.relative_to(dst.parent.parent.parent)}  {size[0]}x{size[1]}")

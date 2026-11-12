@@ -126,7 +126,8 @@ jobs:
         run: grep -E "REDEPLOY CHECK|passed|failed|flaky" live.log >> "$GITHUB_STEP_SUMMARY" || true
 
   mac:
-    needs: test
+    # after the iOS job: two macOS jobs at once left this one waiting for a runner until GitHub cancelled it
+    needs: [test, ios]
     runs-on: macos-latest
     timeout-minutes: 30
     permissions:

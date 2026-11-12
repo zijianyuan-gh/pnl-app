@@ -158,8 +158,21 @@ final class AppUITests: XCTestCase {
         }
     }
 
-    private func shot(_ name: String) {
-        let a = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+    private var lastShot: Data?
+
+    /// A slow machine can still show the previous frame after the page has changed: retake until
+    /// the picture changes. An App Store screenshot (en-/zh-) identical to the previous one fails.
+    private func shot(_ name: String, file: StaticString = #filePath, line: UInt = #line) {
+        var image = XCUIScreen.main.screenshot()
+        for _ in 0..<8 where image.pngRepresentation == lastShot {
+            Thread.sleep(forTimeInterval: 1)
+            image = XCUIScreen.main.screenshot()
+        }
+        if image.pngRepresentation == lastShot, name.hasPrefix("en-") || name.hasPrefix("zh-") {
+            XCTFail("\(name) shows the same picture as the previous screenshot", file: file, line: line)
+        }
+        lastShot = image.pngRepresentation
+        let a = XCTAttachment(screenshot: image)
         a.name = name
         a.lifetime = .keepAlways
         add(a)
