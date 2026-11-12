@@ -1,19 +1,25 @@
-# Daybook release pipeline (free GitHub features only):
+# Daybook web CI and deployment (runs on every code change to main and on pull requests):
 #   test   → unit + Chromium/WebKit E2E on the exact /pnl-app/ build + release gate
 #   pages  → publish that tested build to the gh-pages branch (GitHub Pages, HTTPS)
 #   live   → wait until https://<owner>.github.io/<repo>/ serves THIS commit, then run the
 #            live checks there (Chromium + WebKit), incl. "a redeploy keeps existing data"
-#   mac    → build Daybook.app on macOS, test the real binary there, attach it to a release
-#   ios    → build the native iOS app (Capacitor, web assets bundled), run XCUITests in the
-#            iOS Simulator, export App Store screenshots, make an UNSIGNED device archive
-#            (no signing, no upload — that needs the owner's Apple Developer account)
-# Nothing is published unless `test` passes.
+# Nothing is published unless `test` passes. Changes that only touch documentation (*.md, docs/)
+# do not run this workflow. The iOS simulator suite and the Mac app are checked by the separate
+# "Release validation" workflow (.github/workflows/release-validation.yml).
 name: CI & deploy
 
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/workflows/release-validation.yml'
   pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.github/workflows/release-validation.yml'
   workflow_dispatch:
 
 permissions:
@@ -124,254 +130,3 @@ jobs:
       - name: Summary
         if: always()
         run: grep -E "REDEPLOY CHECK|passed|failed|flaky" live.log >> "$GITHUB_STEP_SUMMARY" || true
-
-  mac:
-    # after the iOS job: two macOS jobs at once left this one waiting for a runner until GitHub cancelled it
-    needs: [test, ios]
-    runs-on: macos-latest
-    timeout-minutes: 30
-    permissions:
-      contents: write
-    env:
-      BASE_PATH: /
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.3.2
-      - run: npm ci
-      - name: Build the web app (root path) and check it
-        run: npm run build && npm run check:dist
-      - name: Build Daybook.app (universal, ad-hoc signed)
-        run: |
-          npm run build:mac
-          lipo -archs release/Daybook.app/Contents/MacOS/daybook
-          codesign -dv release/Daybook.app
-      - run: npx playwright install chromium webkit
-      - name: Test the real binary on macOS (Chromium + Safari's WebKit)
-        run: npm run e2e:mac
-        env:
-          DAYBOOK_BIN: release/Daybook.app/Contents/MacOS/daybook
-          PW_WEBKIT: '1'
-      - name: Test the one-line installer and a real app launch
-        run: |
-          DAYBOOK_ZIP_URL="$PWD/release/Daybook-mac.zip" DAYBOOK_DEST="$RUNNER_TEMP/Applications" bash mac/install.sh
-          for i in $(seq 1 30); do
-            [ "$(curl -s -m 2 http://127.0.0.1:47823/__daybook)" = "daybook" ] && { echo "launched via LaunchServices: OK"; break; }
-            sleep 1
-          done
-          [ "$(curl -s -m 2 http://127.0.0.1:47823/__daybook)" = "daybook" ]
-          curl -fsS http://127.0.0.1:47823/ | grep -q 'Daybook — P&amp;L Journal'
-          pkill -x daybook
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Daybook-mac
-          path: release/Daybook-mac.zip
-          retention-days: 14
-      - name: Attach to the GitHub release
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          v="v$(node -p "require('./package.json').version")"
-          gh release view "$v" >/dev/null 2>&1 || gh release create "$v" --target "$GITHUB_SHA" --title "Daybook ${v#v}" \
-            --notes "Mac: download Daybook-mac.zip, or run in Terminal: curl -fsSL https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/mac/install.sh | bash"
-          gh release upload "$v" release/Daybook-mac.zip --clobber
-          echo "### Mac app: https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/Daybook-mac.zip" >> "$GITHUB_STEP_SUMMARY"
-
-  ios:
-    # builds and tests only (publishes no app), so it runs in parallel with "test"
-    runs-on: macos-latest
-    timeout-minutes: 60
-    permissions:
-      contents: write # only to publish screenshots/logs to the ios-ci-output branch
-    env:
-      BASE_PATH: /
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - name: Toolchain
-        run: xcodebuild -version && xcrun simctl list runtimes | grep -i ios
-      - name: Build the web app and bundle it into the iOS project
-        run: |
-          npm run build && npm run check:dist
-          npx cap sync ios
-          test -f ios/App/App/public/index.html
-          # the app must load its bundled files, never a remote server
-          ! grep -q '"url"' ios/App/App/capacitor.config.json
-          grep -q 'connect-src' ios/App/App/public/index.html
-      - name: Boot a simulator
-        run: |
-          UDID=$(xcrun simctl list devices available -j | python3 scripts/ios-pick-simulator.py)
-          echo "UDID=$UDID" >> "$GITHUB_ENV"
-          # Use the on-screen keyboard (as on an iPhone), so the UI tests can check Quick Add above it
-          python3 - "$UDID" <<'PY'
-          import plistlib, os, sys
-          p = os.path.expanduser("~/Library/Preferences/com.apple.iphonesimulator.plist")
-          d = plistlib.load(open(p, "rb")) if os.path.exists(p) else {}
-          d["ConnectHardwareKeyboard"] = False
-          d.setdefault("DevicePreferences", {}).setdefault(sys.argv[1], {})["ConnectHardwareKeyboard"] = False
-          plistlib.dump(d, open(p, "wb"))
-          PY
-          xcrun simctl boot "$UDID" || true
-          xcrun simctl bootstatus "$UDID" -b
-          open -a Simulator --args -CurrentDeviceUDID "$UDID" || true
-          sleep 5
-          # Safari's first launch does one-time setup that can stall the simulator; do it now, not mid-test
-          xcrun simctl launch "$UDID" com.apple.mobilesafari || true
-          sleep 15
-          xcrun simctl terminate "$UDID" com.apple.mobilesafari || true
-          xcrun simctl bootstatus "$UDID" -b   # still booted and ready
-          xcrun simctl status_bar "$UDID" override --time 9:41 --dataNetwork wifi --wifiBars 3 --cellularBars 4 --batteryState charged --batteryLevel 100
-      - name: Build app + UI tests (simulator)
-        run: |
-          set -o pipefail
-          mkdir -p build/ci-output
-          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug \
-            -destination "id=$UDID" -derivedDataPath build/dd CODE_SIGNING_ALLOWED=NO build-for-testing \
-            | tee build/xcodebuild-build.log | tail -25
-          # compiler warnings in Daybook's own Swift code (Capacitor's are not ours to fix)
-          grep -E "(ios/App/App|ios/App/AppUITests)/[A-Za-z]+\.swift:[0-9]+:[0-9]+: warning:" build/xcodebuild-build.log | sort -u \
-            | tee build/ci-output/app-warnings.txt || true
-          echo "Daybook Swift warnings: $(wc -l < build/ci-output/app-warnings.txt)"
-      - name: Prepare a synthetic PWA backup for the tests
-        run: |
-          node scripts/make-demo-backup.mjs build/demo
-          echo "DEMO_BALANCE=$(node -p "require('./build/demo/expected.json').balance")" >> "$GITHUB_ENV"
-      - name: Enroll Face ID; match a face only when a UI test asks
-        run: |
-          xcrun simctl spawn "$UDID" notifyutil -s com.apple.BiometricKit.enrollmentChanged '1'
-          xcrun simctl spawn "$UDID" notifyutil -p com.apple.BiometricKit.enrollmentChanged
-          # AppUITests.requestFaceIDMatch() drops a file here; each file = one "matching face"
-          mkdir -p build/faceid build/ci-output
-          echo "FACEID_DIR=$PWD/build/faceid" >> "$GITHUB_ENV"
-          nohup bash -c 'while true; do
-              for f in "$0"/match-*; do
-                [ -e "$f" ] || continue
-                id="${f##*/match-}"
-                rm -f "$f"
-                xcrun simctl spawn "$1" notifyutil -p com.apple.BiometricKit_Sim.pearl.match
-                touch "$0/matched-$id"
-                echo "$(date +%T) face matched ($id)"
-              done
-              sleep 0.3
-            done' "$PWD/build/faceid" "$UDID" > build/ci-output/faceid.log 2>&1 &
-      - name: Run the UI tests in the Simulator
-        env:
-          TEST_RUNNER_DEMO_BALANCE: ${{ env.DEMO_BALANCE }}
-          TEST_RUNNER_FACEID: '1'
-          TEST_RUNNER_FACEID_DIR: ${{ env.FACEID_DIR }}
-        run: |
-          set -o pipefail
-          # the Debug app copies this backup into its Documents folder (see DaybookViewController.seedForUITests)
-          export TEST_RUNNER_DEMO_FILE="$PWD/build/demo/demo-backup.json"
-          export TEST_RUNNER_DEMO_DIR="$PWD/build/demo/files"
-          mkdir -p build/ci-output
-          xcodebuild -project ios/App/App.xcodeproj -scheme App -destination "id=$UDID" -derivedDataPath build/dd \
-            -resultBundlePath build/UITests.xcresult -skip-testing:AppUITests/AppUITests/testZ_dataSurvivesReinstall \
-            CODE_SIGNING_ALLOWED=NO test-without-building 2>&1 \
-            | tee build/ci-output/xcodebuild-test.log \
-            | grep -E "Test (Suite|Case)|error:|failed|passed|skipped|\*\* TEST" | tail -60
-      - name: Updating the app keeps the data (reinstall over the existing app, then check)
-        env:
-          TEST_RUNNER_AFTER_REINSTALL: '1'
-        run: |
-          set -o pipefail
-          echo "before: app $(xcrun simctl get_app_container "$UDID" io.github.zijianyuangh.daybook app)"
-          echo "before: data $(xcrun simctl get_app_container "$UDID" io.github.zijianyuangh.daybook data)"
-          # xcodebuild installs the app again over the existing one (bundle replaced, data kept — as an update)
-          xcodebuild -project ios/App/App.xcodeproj -scheme App -destination "id=$UDID" -derivedDataPath build/dd \
-            -resultBundlePath build/UpdateTest.xcresult -only-testing:AppUITests/AppUITests/testZ_dataSurvivesReinstall \
-            CODE_SIGNING_ALLOWED=NO test-without-building 2>&1 \
-            | tee build/ci-output/xcodebuild-update-test.log \
-            | grep -E "Test (Suite|Case)|error:|\*\* TEST" | tail -20
-          echo "after:  app $(xcrun simctl get_app_container "$UDID" io.github.zijianyuangh.daybook app)"
-          echo "after:  data $(xcrun simctl get_app_container "$UDID" io.github.zijianyuangh.daybook data)"
-      - name: Export screenshots
-        if: always()
-        run: |
-          mkdir -p build/screenshots build/ci-output
-          xcrun xcresulttool export attachments --path build/UITests.xcresult --output-path build/screenshots || true
-          xcrun xcresulttool export attachments --path build/UpdateTest.xcresult --output-path build/screenshots/update || true
-          ls -la build/screenshots | head -60
-          DATA=$(xcrun simctl get_app_container "$UDID" io.github.zijianyuangh.daybook data 2>/dev/null || true)
-          echo "DATA=$DATA" >> "$GITHUB_ENV"
-          echo "--- app Documents after the tests:"; ls -la "$DATA/Documents" || true
-          # app + web console log (Capacitor forwards console output in Debug builds)
-          xcrun simctl spawn "$UDID" log show --last 30m --style compact --predicate 'process == "App"' > build/ci-output/app.log 2>&1 || true
-          # the Files picker runs outside the app: keep its and the file provider's errors for diagnosis
-          xcrun simctl spawn "$UDID" log show --last 60m --style compact \
-            --predicate '(process CONTAINS[c] "fileprovider" OR process CONTAINS[c] "DocumentManager" OR subsystem CONTAINS[c] "FileProvider" OR subsystem CONTAINS[c] "DocumentManager") AND (messageType == error OR messageType == fault OR eventMessage CONTAINS[c] "fail")' \
-            2>&1 | tail -3000 > build/ci-output/files-service.log || true
-          grep -E "Daybook" build/ci-output/app.log | grep -v XC_kAX | tail -20 || true
-      - name: The iPhone app also runs on iPad (compatibility mode, Guideline 2.4.1)
-        timeout-minutes: 12
-        run: |
-          xcrun simctl shutdown "$UDID" || true   # iPhone results are exported; free the machine
-          IPAD=$(xcrun simctl list devices available -j | python3 scripts/ios-pick-simulator.py --ipad)
-          echo "$(date +%T) booting iPad $IPAD"
-          xcrun simctl boot "$IPAD" || true
-          xcrun simctl bootstatus "$IPAD" -b
-          echo "$(date +%T) installing"
-          xcrun simctl install "$IPAD" build/dd/Build/Products/Debug-iphonesimulator/App.app
-          echo "$(date +%T) launching"
-          xcrun simctl launch "$IPAD" io.github.zijianyuangh.daybook
-          sleep 15
-          mkdir -p build/ci-output
-          xcrun simctl io "$IPAD" screenshot build/ci-output/ipad-compat.png
-          # still running 15 s after launch (no crash)
-          xcrun simctl spawn "$IPAD" launchctl list | grep "UIKitApplication:io.github.zijianyuangh.daybook"
-          xcrun simctl shutdown "$IPAD" || true
-      - name: Publish screenshots and logs to the ios-ci-output branch (main only)
-        if: always() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          out=build/ci-output
-          mkdir -p "$out"
-          cp -R build/screenshots "$out/" 2>/dev/null || true
-          (ls -la "$DATA/Documents" || true) > "$out/documents.txt"
-          echo "${GITHUB_SHA}" > "$out/COMMIT"
-          cd "$out"
-          git init -q -b ios-ci-output
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A && git commit -qm "iOS CI output for ${GITHUB_SHA}"
-          git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" ios-ci-output
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: ios-ui-tests
-          path: |
-            build/screenshots
-            build/UITests.xcresult
-          retention-days: 14
-      - name: Release archive for a real iPhone (unsigned — proves the device build compiles)
-        run: |
-          set -o pipefail
-          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Release \
-            -destination 'generic/platform=iOS' -archivePath build/Daybook.xcarchive \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO archive | tail -15
-          APP=build/Daybook.xcarchive/Products/Applications/App.app
-          test -f "$APP/public/index.html"
-          lipo -archs "$APP/App"
-          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' -c 'Print :CFBundleShortVersionString' -c 'Print :CFBundleVersion' "$APP/Info.plist"
-          # App Store requirements visible in the built bundle
-          /usr/libexec/PlistBuddy -c 'Print :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconName' "$APP/Info.plist"
-          test -f "$APP/Assets.car"
-          plutil -lint "$APP/PrivacyInfo.xcprivacy"
-          plutil -p "$APP/PrivacyInfo.xcprivacy" | grep -q NSPrivacyAccessedAPICategoryUserDefaults
-          plutil -p "$APP/PrivacyInfo.xcprivacy" | grep -q NSPrivacyAccessedAPICategoryFileTimestamp
-          # test-only code and debugging stay out of the Release build
-          if strings "$APP/App" | grep -q DAYBOOK_UITEST_SEED_FILE; then echo "UI-test seed hook in Release binary"; exit 1; fi
-          if grep -Eq '"server"|"webContentsDebuggingEnabled": *true' "$APP/capacitor.config.json"; then echo "remote server or web inspector in Release config"; exit 1; fi
-          echo "release bundle checks passed"
-          echo "### iOS: simulator UI tests passed; unsigned Release archive built ($(du -sh "$APP" | cut -f1)), privacy manifest present" >> "$GITHUB_STEP_SUMMARY"

@@ -139,26 +139,13 @@ public class DaybookNativePlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPickerD
         try FileManager.default.url(for: .documentDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
     }
 
-    /// Writes a file that the Files app / document picker show (Documents), safely:
-    /// - the new content is written completely to the app's own tmp folder first, outside the folder
-    ///   that Files indexes (a temporary file inside it can leave Files with a stale entry that it
-    ///   then cannot open), and only then moved / swapped into place — never a half-written file;
-    /// - through NSFileCoordinator, so Files is told about the change.
+    /// Writes through NSFileCoordinator, so the Files app / document picker (other processes that
+    /// show this folder) are told about the new file and can open it right away.
     static func coordinatedWrite(_ data: Data, to url: URL) throws {
-        let fm = FileManager.default
-        let staged = fm.temporaryDirectory.appendingPathComponent("daybook-\(UUID().uuidString).tmp")
-        try data.write(to: staged, options: [.atomic])
-        defer { try? fm.removeItem(at: staged) }
         var coordinationError: NSError?
         var writeError: Error?
         NSFileCoordinator(filePresenter: nil).coordinate(writingItemAt: url, options: .forReplacing, error: &coordinationError) { target in
-            do {
-                if fm.fileExists(atPath: target.path) {
-                    _ = try fm.replaceItemAt(target, withItemAt: staged)
-                } else {
-                    try fm.moveItem(at: staged, to: target)
-                }
-            } catch { writeError = error }
+            do { try data.write(to: target, options: [.atomic]) } catch { writeError = error }
         }
         if let error = coordinationError ?? writeError { throw error }
     }

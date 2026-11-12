@@ -37,7 +37,7 @@ iOS App（v1.2）的验证状态见下方「iOS App 验证状态」。
 | **真实 iPhone 上的 iOS Safari** | ❌ **未验证** | Playwright WebKit ≠ iOS Safari；需要下面的真机验收 |
 | iOS 分享面板「存储到“文件”」、文件选择器、数字键盘、主屏幕模式、VoiceOver 朗读 | ❌ **未验证**（已按 iOS 规则实现并在 Chromium 中模拟） | 需要下面的真机验收 |
 
-CI（`.github/workflows/ci-deploy.yml`）在每次推送时运行类型检查、单元测试、Chromium + WebKit E2E 和生产构建。
+CI（`.github/workflows/ci-deploy.yml`）在每次代码推送时运行类型检查、单元测试、Chromium + WebKit E2E 和生产构建；只改文档（`*.md`、`docs/`）的提交不触发。iOS 模拟器完整测试与 Mac 版在单独的「Release validation」工作流中运行（见下方「持续集成与发布」）。
 
 ## iPhone 真机验收（约 10 分钟）
 
@@ -87,12 +87,21 @@ npm run e2e          # E2E（Playwright，自动构建并启动预览）；PW_WE
 
 **https://zijianyuan-gh.github.io/pnl-app/**
 
-`.github/workflows/ci-deploy.yml` 在每次推送到 `main` 时：
+`.github/workflows/ci-deploy.yml` 在每次推送代码到 `main` 时（只改 `*.md` 或 `docs/` 的提交不触发）：
 1. 运行类型检查、单元测试、Chromium + WebKit E2E（针对 `/pnl-app/` 子路径的正式构建）和发布检查（`npm run check:dist`：不得含测试交易、备份文件或密钥，必须带 CSP）；
 2. 全部通过后，把**这份已测试的构建**发布到 `gh-pages` 分支；
 3. 等待线上地址返回本次提交的构建（`<meta name="daybook-build">`），再在**真实线上地址**上运行 Chromium + WebKit 检查：首页、快速记录、统计、账户、中英文、手机布局、HTTPS 下的 Service Worker 离线、退出重开、备份恢复，以及“重新部署后旧数据仍在”（跨部署保留同一个浏览器配置文件进行核对）。
 
 数据只保存在访问者自己设备的浏览器里，网站本身不含任何数据。重新部署只替换代码文件，不会触碰浏览器中的 IndexedDB。地址与数据绑定，请一直使用这个地址。
+
+## 持续集成与发布
+
+| 工作流 | 何时运行 | 内容 |
+| --- | --- | --- |
+| **CI & deploy**（`ci-deploy.yml`） | 每次推送代码到 `main`、每个 Pull Request；只改文档（`*.md`、`docs/`）时不运行 | Web 单元测试与 E2E → 发布 GitHub Pages → 线上检查 |
+| **Release validation**（`release-validation.yml`） | 手动（Actions →「Release validation」→ Run workflow，或 `gh workflow run release-validation.yml`）；推送版本标签 `vX.Y.Z` 时自动 | Web 全部测试；iOS 模拟器完整 UI 测试、iPad 兼容启动、Release 真机归档与包内检查；Mac 版构建与测试。**正式发布的必需关卡**：只有推送版本标签且以上全部通过，才会创建 GitHub Release 并附上 Mac 版 |
+
+截图、日志和测试结果保存为该次运行的 Artifacts（30 天）；同时镜像到 `ios-ci-output` 分支（单个强制推送的提交，不写入 `main`）。发布新版本：先手动运行一次 Release validation，通过后推送与 `package.json` 一致的标签，例如 `git tag v1.2.0 && git push origin v1.2.0`。
 
 ## Mac 本地版
 
@@ -120,7 +129,7 @@ curl -fsSL https://raw.githubusercontent.com/zijianyuan-gh/pnl-app/main/mac/inst
 
 ### iOS App 验证状态（如实区分）
 
-**已实际构建并自动化验证**（GitHub Actions `macos` 运行器，Xcode 26.6，iOS 26.5 模拟器 iPhone 17 Pro Max；每次推送都会重跑，结果截图与日志发布在 `ios-ci-output` 分支）：
+**已实际构建并自动化验证**（GitHub Actions `macos` 运行器，Xcode 26.6，iOS 26.5 模拟器 iPhone 17 Pro Max；由「Release validation」工作流运行，结果截图与日志发布在 `ios-ci-output` 分支）：
 
 | 内容 | 结果 |
 | --- | --- |
@@ -250,7 +259,8 @@ src/
   lib/                    金额、日期、统计、CSV、SHA-256、文件、平台检测（纯函数为主）
   i18n/                   中英文文案
 tests/unit/ tests/e2e/ tests/fixtures/
-.github/workflows/ci-deploy.yml   测试 → GitHub Pages 发布 → 线上验证；Mac 应用构建与发布
+.github/workflows/ci-deploy.yml          Web 测试 → GitHub Pages 发布 → 线上验证（文档改动不触发）
+.github/workflows/release-validation.yml  发布前完整验收：iOS 模拟器测试、Mac 版；版本标签通过后才发布 Release
 mac/                              Mac 启动器（server.ts）与一行安装脚本
 docs/screenshots/                 生产构建截图（合成数据）
 ```

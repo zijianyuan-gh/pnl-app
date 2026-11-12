@@ -19,7 +19,7 @@ The Bundle ID can still be changed before the first upload (edit `scripts/ios-pr
 
 | Requirement | Status |
 | --- | --- |
-| Xcode project builds for device (Release, arm64) | ✅ CI: unsigned archive on every push |
+| Xcode project builds for device (Release, arm64) | ✅ "Release validation" workflow: unsigned archive + bundle checks |
 | App works offline, bundled content, no remote URL | ✅ CI checks the bundle and config |
 | App icon 1024 × 1024, no alpha; launch screen | ✅ |
 | Privacy manifest (`PrivacyInfo.xcprivacy`) in the app | ✅ CI checks the Release archive |
