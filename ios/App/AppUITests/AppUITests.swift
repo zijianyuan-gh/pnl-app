@@ -296,9 +296,13 @@ final class AppUITests: XCTestCase {
         guard found else {
             throw XCTSkip("Could not navigate the system Files picker in this simulator; the picker opened but the file could not be selected by automation.")
         }
-        file.tap()
-
-        wait(textContaining("Checksum verified (SHA-256)"), 15)
+        // a tap during the folder's push animation can be ignored: tap until the picker closes
+        let verified = textContaining("Checksum verified (SHA-256)")
+        for _ in 0..<4 where file.exists && !verified.exists {
+            if file.isHittable { file.tap() }
+            _ = verified.waitForExistence(timeout: 4)
+        }
+        wait(verified, 15)
         // choose "Merge" (the option's label also carries its help text), then run it
         let mergeOption = web.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@ AND label != %@", "Merge into current data", "Merge into current data")).firstMatch
         if mergeOption.exists { mergeOption.tap() }
