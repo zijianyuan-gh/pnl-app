@@ -14,6 +14,22 @@ final class AppUITests: XCTestCase {
         app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
     }
 
+    /// On any failure keep a screenshot and the accessibility tree (CI publishes them).
+    override func record(_ issue: XCTIssue) {
+        var issue = issue
+        if let app = app {
+            let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            shot.name = "FAIL-\(name)-screen"
+            shot.lifetime = .keepAlways
+            issue.add(shot)
+            let tree = XCTAttachment(string: String(app.debugDescription.prefix(200_000)))
+            tree.name = "FAIL-\(name)-tree"
+            tree.lifetime = .keepAlways
+            issue.add(tree)
+        }
+        super.record(issue)
+    }
+
     // MARK: - Helpers
 
     private var web: XCUIElement { app.webViews.firstMatch }
@@ -88,9 +104,9 @@ final class AppUITests: XCTestCase {
         shot("en-1-calendar")
 
         button("Add").tap()
-        let amount = wait(web.textFields["Net realized P&L"])
-        amount.tap()
-        amount.typeText("128.40")
+        // the amount field is focused and the decimal keypad is up right away (keyboard priming)
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10), "keyboard did not appear")
+        app.typeText("128.40")
         web.radioButtons["Loss"].firstMatch.tap()
         Thread.sleep(forTimeInterval: 0.8)
         shot("en-2-quick-add")
@@ -129,9 +145,8 @@ final class AppUITests: XCTestCase {
 
         button("Add").tap()
         if button("Discard").waitForExistence(timeout: 2) { button("Discard").tap() }
-        let amount = wait(web.textFields["Net realized P&L"])
-        amount.tap()
-        amount.typeText("1234.56")
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 10), "keyboard did not appear")
+        app.typeText("1234.56")
         wait(textContaining("+$1,234.56"))
         button("Save").tap()
         wait(textContaining("Saved +$1,234.56"), 10)

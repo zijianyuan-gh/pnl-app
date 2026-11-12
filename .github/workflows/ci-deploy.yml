@@ -183,9 +183,11 @@ jobs:
           echo "### Mac app: https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/Daybook-mac.zip" >> "$GITHUB_STEP_SUMMARY"
 
   ios:
-    # builds and tests only (publishes nothing), so it runs in parallel with "test"
+    # builds and tests only (publishes no app), so it runs in parallel with "test"
     runs-on: macos-latest
     timeout-minutes: 60
+    permissions:
+      contents: write # only to publish screenshots/logs to the ios-ci-output branch
     env:
       BASE_PATH: /
     steps:
@@ -226,6 +228,8 @@ jobs:
           mkdir -p "$DATA/Documents"
           cp build/demo/demo-backup.json "$DATA/Documents/Daybook Auto-Backup.json"
           cp build/demo/demo-backup.json "$DATA/Documents/Daybook PWA backup.json"
+          echo "DATA=$DATA" >> "$GITHUB_ENV"
+          ls -la "$DATA/Documents"
       - name: Enroll Face ID and auto-match prompts in the background
         run: |
           xcrun simctl spawn "$UDID" notifyutil -s com.apple.BiometricKit.enrollmentChanged '1'
@@ -237,15 +241,34 @@ jobs:
           TEST_RUNNER_FACEID: '1'
         run: |
           set -o pipefail
+          mkdir -p build/ci-output
           xcodebuild -project ios/App/App.xcodeproj -scheme App -destination "id=$UDID" -derivedDataPath build/dd \
             -resultBundlePath build/UITests.xcresult CODE_SIGNING_ALLOWED=NO test-without-building 2>&1 \
+            | tee build/ci-output/xcodebuild-test.log \
             | grep -E "Test (Suite|Case)|error:|failed|passed|skipped|\*\* TEST" | tail -60
       - name: Export screenshots
         if: always()
         run: |
-          mkdir -p build/screenshots
+          mkdir -p build/screenshots build/ci-output
           xcrun xcresulttool export attachments --path build/UITests.xcresult --output-path build/screenshots || true
-          ls -la build/screenshots | head -40
+          ls -la build/screenshots | head -60
+          echo "--- app Documents after the tests:"; ls -la "$DATA/Documents" || true
+      - name: Publish screenshots and logs to the ios-ci-output branch (main only)
+        if: always() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          out=build/ci-output
+          mkdir -p "$out"
+          cp -R build/screenshots "$out/" 2>/dev/null || true
+          (ls -la "$DATA/Documents" || true) > "$out/documents.txt"
+          echo "${GITHUB_SHA}" > "$out/COMMIT"
+          cd "$out"
+          git init -q -b ios-ci-output
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A && git commit -qm "iOS CI output for ${GITHUB_SHA}"
+          git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" ios-ci-output
       - uses: actions/upload-artifact@v4
         if: always()
         with:
