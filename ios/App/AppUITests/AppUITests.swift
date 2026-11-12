@@ -255,11 +255,21 @@ final class AppUITests: XCTestCase {
         shot("picker-\(name)")
         if !found { attachTree("picker-tree-\(name)") }
         XCTAssertTrue(found, "\(name) not shown in the Files picker", file: file, line: line)
-        // a tap during the folder's push animation can be ignored: tap until the picker closes
-        for _ in 0..<4 where cell.exists && !opened.exists {
-            if cell.isHittable { cell.tap() }
-            _ = opened.waitForExistence(timeout: 4)
+        // The picker runs in another process and can drop a tap (folder still settling, busy CI
+        // machine): let it settle, then try the cell, its icon and its name until the picker closes.
+        Thread.sleep(forTimeInterval: 1.5)
+        let taps: [() -> Void] = [
+            { cell.tap() },
+            { cell.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap() },
+            { cell.staticTexts.firstMatch.tap() },
+            { cell.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap() },
+            { cell.tap() },
+        ]
+        for tapIt in taps where cell.exists && !opened.exists {
+            if cell.isHittable { tapIt() }
+            _ = opened.waitForExistence(timeout: 5)
         }
+        if !opened.exists { attachTree("picker-tree-after-taps-\(name)") }
         wait(opened, 15, file: file, line: line)
     }
 
